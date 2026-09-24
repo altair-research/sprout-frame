@@ -32,7 +32,10 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      // **내 이름으로 시작하는 캐시만** 지운다. altair-research.github.io 는 drape 등 다른 앱과 같은 사이트(오리진)라
+      // 캐시 저장소를 같이 쓴다. 예전처럼 "내 것이 아니면 전부 삭제"하면 남의 앱 오프라인 캐시를 지운다(2026-09-24 발견).
+      .then(keys => Promise.all(keys.filter(k => (k.startsWith('sproutframe-') || k.startsWith('ghostcam-')) && k !== CACHE)
+                                    .map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
