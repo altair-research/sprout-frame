@@ -1,8 +1,8 @@
-# Ghost Cam
+# Sprout Frame
 
 Shoot your plant any way you like, tap the pot rim twice, and see how much it grew since last time.
 
-**App:** https://altair-research.github.io/ghost-cam/ · **Privacy:** https://altair-research.github.io/ghost-cam/privacy.html
+**App:** https://altair-research.github.io/sprout-frame/ · **Privacy:** https://altair-research.github.io/sprout-frame/privacy.html
 
 Everything runs in your browser. Photos never leave your device.
 
