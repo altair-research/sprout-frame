@@ -46,10 +46,18 @@ self.addEventListener('fetch', e => {
   // 전에는 페이지만 네트워크 우선이라, 배포 직후 첫 실행에서 새 HTML + 캐시의 옛 JS가 섞였다.
   // 새 HTML에서 지운 요소를 옛 JS가 찾다가 멈췄다(2026-09-24, v33 검증 중 실측: ghostFile).
   // 새 버전은 서비스 워커가 뒤에서 받아 두었다가 **다음 실행**에 통째로 바뀐다 — 원래도 "두 번 열기"였다.
+  //
+  // ⚠️ 캐시의 './index.html'을 그대로 내주면 안 된다. Cloudflare는 /index.html 을 / 로 **리다이렉트(307)**하고,
+  //    그 '리다이렉트를 거친 응답'이 캐시에 들어간다. 크롬은 그런 응답으로 페이지를 여는 것을 거부한다 → ERR_FAILED.
+  //    v33~v34의 옛 주소(홈 화면 앱)가 실제로 이렇게 안 열렸다(2026-09-24). GitHub Pages·로컬 서버는 리다이렉트가 없어 못 잡았다.
+  //    그래서 './'(리다이렉트 없음)를 먼저 찾고, 그래도 리다이렉트 흔적이 있으면 본문만 옮겨 새 응답을 만든다.
   if (req.mode === 'navigate') {
-    e.respondWith(
-      caches.match('./index.html').then(hit => hit || fetch(req))
-    );
+    e.respondWith((async () => {
+      const hit = (await caches.match('./')) || (await caches.match('./index.html'));
+      if (!hit) return fetch(req);
+      if (!hit.redirected) return hit;
+      return new Response(await hit.blob(), {status: 200, statusText: 'OK', headers: hit.headers});
+    })());
     return;
   }
 
