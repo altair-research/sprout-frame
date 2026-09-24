@@ -1,0 +1,235 @@
+:root{
+  --bg:#111413;
+  --panel:#1a1f1d;
+  --line:#2c3330;
+  --fg:#e8ece9;
+  --dim:#98a29d;
+  --accent:#7fb069;
+  --warn:#e0a458;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font:15px/1.5 system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif;
+  display:flex; flex-direction:column;
+  -webkit-tap-highlight-color:transparent;
+}
+.bar{
+  display:flex; align-items:center; gap:8px;
+  padding:10px 12px; border-bottom:1px solid var(--line);
+}
+.spacer{flex:1}
+h2{font-size:16px;margin:0}
+
+select{
+  background:var(--panel); color:var(--fg); border:1px solid var(--line);
+  border-radius:8px; padding:8px 10px; font:inherit; max-width:55vw;
+}
+button{font:inherit; cursor:pointer}
+.ghost-btn{
+  background:transparent; color:var(--fg); border:1px solid var(--line);
+  border-radius:8px; padding:8px 12px;
+}
+.chip{
+  background:var(--panel); color:var(--fg); border:1px solid var(--line);
+  border-radius:999px; padding:8px 14px;
+}
+.chip.on{border-color:var(--accent); color:var(--accent)}
+.primary{
+  background:var(--accent); color:#0d1210; border:0;
+  border-radius:10px; padding:12px 20px; font-weight:600;
+}
+
+main{flex:1; display:flex; flex-direction:column; min-height:0}
+
+/* 촬영 프레임 — 출력과 같은 4:5 비율. 여기 보이는 만큼이 그대로 저장된다. */
+/* 높이는 flex가 정하고(남는 만큼), 폭은 aspect-ratio가 높이에서 역산한다.
+   예전엔 width:min(100%, 70svh×4/5)로 잡았는데, 샷 리스트 한 줄이 들어오자 폰(375×812)에서
+   42px가 넘쳐 셔터가 접혔다(2026-09-17). 이 방식이면 위아래 요소가 늘어도 무대가 알아서 줄고,
+   width:100% + max-height 조합처럼 비율이 깨지는 일도 없다(실측 0.800 유지).
+   비율 4:5는 app.js의 TARGET_W/TARGET_H와 반드시 같아야 한다. */
+/* 높이를 '화면 폭 기준 4:5'로 정해 두고, 자리가 모자라면 flex가 줄인다. 폭은 aspect-ratio가 높이에서 역산.
+   flex:1로 늘리는 방식은 도구를 접어 자리가 남을 때 max-width에 걸려 비율이 0.635로 깨졌다(2026-09-23 실측). */
+#camera .stage{
+  position:relative; aspect-ratio:4/5;
+  height:calc(min(100vw, 480px) * 5 / 4);
+  flex:0 1 auto; min-height:0; width:auto; max-width:100%;
+  margin:0 auto; background:#000; overflow:hidden;
+  align-self:center;
+}
+/* 리뷰 시트의 무대는 flex 안이 아니므로 예전 방식 그대로 */
+.sheet .stage{
+  position:relative; aspect-ratio:4/5;
+  width:min(100%, calc(60svh * 4 / 5));
+  margin:0 auto; background:#000; overflow:hidden; flex:none;
+}
+.stage video,.stage img{
+  position:absolute; inset:0; width:100%; height:100%;
+  object-fit:cover; display:block;
+}
+#ghost{pointer-events:none}
+#ghost.difference{mix-blend-mode:difference; opacity:1 !important}
+
+.grid{position:absolute; inset:0; pointer-events:none;
+  background:
+    linear-gradient(to right,transparent calc(33.333% - 1px),rgba(255,255,255,.35) 33.333%,transparent calc(33.333% + 1px)),
+    linear-gradient(to right,transparent calc(66.666% - 1px),rgba(255,255,255,.35) 66.666%,transparent calc(66.666% + 1px)),
+    linear-gradient(to bottom,transparent calc(33.333% - 1px),rgba(255,255,255,.35) 33.333%,transparent calc(33.333% + 1px)),
+    linear-gradient(to bottom,transparent calc(66.666% - 1px),rgba(255,255,255,.35) 66.666%,transparent calc(66.666% + 1px));
+}
+/* 소개가 무대보다 길면 위아래가 잘리지 않고 스크롤되게. safe center = 넘칠 땐 위에서부터. */
+.stage-msg{
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; justify-content:safe center;
+  gap:10px; text-align:center; padding:16px; overflow-y:auto;
+}
+.stage-msg[hidden]{display:none}
+
+.controls{padding:12px; display:flex; flex-direction:column; gap:12px}
+.row{display:flex; align-items:center; gap:10px}
+.row span{white-space:nowrap; color:var(--dim); font-size:13px}
+.row b{color:var(--fg)}
+.btns{flex-wrap:wrap}
+input[type=range]{flex:1; accent-color:var(--accent)}
+.shutter{
+  width:100%; padding:16px; border:0; border-radius:12px;
+  background:var(--accent); color:#0d1210; font-weight:700; font-size:17px;
+}
+.shutter:disabled{background:var(--panel); color:var(--dim)}
+.status{margin:0; font-size:13px; color:var(--dim); min-height:1.5em; white-space:pre-line}
+.status.warn{color:var(--warn)}
+.hint{margin:0; font-size:13px; color:var(--dim)}
+
+.sheet{
+  position:fixed; inset:0; background:var(--bg); z-index:10;
+  overflow:auto; padding:12px; display:flex; flex-direction:column; gap:12px;
+}
+.sheet[hidden]{display:none}
+
+.shots{display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px}
+.shot{background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden}
+.shot img{width:100%; aspect-ratio:4/5; object-fit:cover; display:block; background:#000}
+.shot .meta{padding:8px; font-size:12px; color:var(--dim)}
+.shot .acts{display:flex; flex-wrap:wrap; gap:4px; padding:0 8px 8px}
+.shot .acts button{flex:1 1 30%; font-size:12px; padding:6px 0; background:transparent;
+  color:var(--fg); border:1px solid var(--line); border-radius:6px}
+.shot.is-ref{border-color:var(--accent)}
+
+@media (min-width:900px){
+  #camera .stage{max-width:480px}
+  .sheet .stage{width:min(480px, calc(60svh * 4 / 5))}
+  .controls{max-width:520px; margin:0 auto; width:100%}
+}
+
+/* 갤러리의 체크박스형 chip. 버튼과 같은 높이로 보이게만 맞춘다. */
+.chip.check{ display:inline-flex; align-items:center; gap:.4em; cursor:pointer; }
+.chip.check input{ margin:0; }
+
+/* 첫 화면 소개. 4:5 무대 안에 폰(375px)에서도 다 들어가야 하므로 글자를 작게 잡는다. */
+.intro{max-width:34ch}
+.intro h1{margin:0 0 6px; font-size:22px; letter-spacing:.02em}
+.intro .lead{margin:0 0 10px; font-size:14px; line-height:1.45; word-break:keep-all}
+.intro .steps{margin:0; padding-left:1.4em; text-align:left; font-size:13px; line-height:1.5; color:var(--dim)}
+.intro .steps li{margin:2px 0}
+.privacy{margin:0; font-size:11px; line-height:1.4; color:var(--dim); opacity:.85}
+
+/* 샷 리스트 chip. 무대 위 한 줄. 오늘 찍은 컷은 .done */
+.views{display:flex; gap:6px; padding:8px 12px 0; overflow-x:auto; scrollbar-width:none}
+.views::-webkit-scrollbar{display:none}
+.chip.view{padding:6px 12px; font-size:13px; white-space:nowrap; flex:none}
+.chip.view.done{color:var(--accent)}
+.chip.view.done:not(.on){border-color:var(--line)}
+.chip.view.add{padding:6px 10px; color:var(--dim)}
+
+/* 탭 층. 테두리 양끝·꼭대기 탭을 받는다. */
+.mark{position:absolute; inset:0; cursor:crosshair; touch-action:none}
+.mark[hidden]{display:none}
+.mark i{position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%;
+  background:var(--accent); box-shadow:0 0 0 2px #000}
+
+/* 키 재기 오버레이. viewBox가 저장 픽셀(1280×1600)이라 좌표를 그대로 쓴다. */
+.msvg{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+.msvg circle{fill:var(--accent); stroke:#000; stroke-width:4}
+.msvg circle.fixed{fill:var(--dim)}
+.msvg line{stroke:var(--accent); stroke-width:8; stroke-linecap:round}
+.msvg line.h{stroke:#fff; stroke-dasharray:24 16}
+.msvg text{fill:#fff; font:bold 60px system-ui,sans-serif; paint-order:stroke; stroke:#000; stroke-width:10}
+
+/* 성장 그래프. 갤러리 맨 위. 값이 하나면 점만 찍힌다. */
+.growth{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px}
+.growth[hidden]{display:none}
+.growth .sum{margin:0 0 6px; font-size:13px}
+.growth .sum b{color:var(--accent)}
+.growth svg{display:block; width:100%; height:auto}
+.growth polyline{fill:none; stroke:var(--accent); stroke-width:2}
+.growth circle{fill:var(--accent)}
+.growth text{fill:var(--dim); font-size:11px}
+
+
+.ver{font-size:12px; color:var(--dim); margin-right:4px; white-space:nowrap}
+
+/* 비교 화면. 지난 사진(then)이 지금 사진 위에 놓이고 clip-path로 갈린다. */
+#compareStage img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover}
+#compareThen{clip-path:inset(0 50% 0 0)}
+#compareThen.fade{clip-path:none}
+.wipe-line{position:absolute; top:0; bottom:0; left:50%; width:2px; margin-left:-1px;
+  background:var(--accent); box-shadow:0 0 0 1px rgba(0,0,0,.5); pointer-events:none}
+.wipe-line[hidden]{display:none}
+.tag{position:absolute; top:8px; padding:3px 8px; border-radius:6px; font-size:12px;
+  background:rgba(0,0,0,.6); color:#fff; pointer-events:none}
+.tag.left{left:8px} .tag.right{right:8px}
+.shot .meta i{color:var(--warn); font-style:normal}
+
+/* 접힌 도구들. More tools를 누르면 펼친다. */
+.more{background:transparent; border:0; color:var(--dim); font-size:13px; padding:4px 0; text-align:left; align-self:flex-start}
+.adv{display:flex; flex-direction:column; gap:12px}
+.adv[hidden]{display:none}
+.views[hidden]{display:none}
+
+/* 기울기 과녁. 점을 가운데 원(±1°)에 넣는다. 점선 원은 ±3°. */
+/* 과녁 위치는 글자 길이와 무관하게 고정. 전에는 캡션이 길어지면(초록일 때 "✓ tilt · line up…") 컨테이너가 넓어지며
+   원이 왼쪽으로 밀렸다(2026-09-23 사용자). 캡션은 원 아래에 절대 위치로, 오른쪽 끝을 원에 맞춘다. */
+.tilt{position:absolute; top:8px; right:8px; width:84px; pointer-events:none}
+.tilt[hidden]{display:none}
+.tilt .pad{position:relative; width:84px; height:84px; border-radius:50%; background:rgba(0,0,0,.45); box-shadow:inset 0 0 0 2px rgba(255,255,255,.35)}
+.tilt .pad[hidden]{display:none}
+.tilt .ring{position:absolute; left:50%; top:50%; border-radius:50%; transform:translate(-50%,-50%)}
+/* 크기는 app.js의 d/(d+3) 식에서 역산: 0.5°에서 점 중심이 4.7px 이동 + 점 반지름 5 = 9.7 → 안쪽 반지름 10(지름 24, 테두리 2).
+   2°에서 13.2+5 = 18 → 점선 지름 36. 처음엔 지름 20으로 잡아 점이 반쯤 걸친 채 초록이 떴다(검증 스크린샷). */
+.tilt .ring{box-sizing:border-box}
+.tilt .ring.near{width:38px; height:38px; border:1.5px dashed rgba(255,255,255,.55)}
+.tilt .ring.ok{width:24px; height:24px; border:2px solid #fff}
+.tilt .dot{position:absolute; left:50%; top:50%; width:10px; height:10px; margin:-5px 0 0 -5px; border-radius:50%;
+  background:#fff; box-shadow:0 0 0 2px #000; transition:transform .06s linear}
+.tilt.near .dot{background:var(--warn)}
+.tilt.ok .dot{background:var(--accent)}
+.tilt.ok .pad{box-shadow:inset 0 0 0 3px var(--accent)}
+.tilt .cap{position:absolute; top:88px; right:0; white-space:nowrap; font-size:11px; color:#fff; background:rgba(0,0,0,.55); padding:1px 7px; border-radius:999px}
+.tilt .pad[hidden] + .cap{top:0}
+.tilt.ok .cap{background:var(--accent); color:#0d1210; font-weight:700}
+
+/* 화면 전체 일치도. 무대 왼쪽 위. 문턱(0.7) 이상이면 초록. */
+.match{position:absolute; top:8px; left:8px; padding:3px 9px; border-radius:999px; font-size:12px; font-weight:600;
+  background:rgba(0,0,0,.55); color:#fff; pointer-events:none}
+.match.good{background:var(--accent); color:#0d1210; box-shadow:0 0 0 2px #0d1210}
+.match[hidden]{display:none}
+/* 지난번 테두리 선. 화분 입구를 여기에 맞춘다. */
+.msvg.live[hidden]{display:none}
+.msvg.live line{stroke:#fff; stroke-width:6; stroke-dasharray:28 18; stroke-linecap:round; filter:drop-shadow(0 0 3px #000)}
+.msvg.live circle{fill:none; stroke:#fff; stroke-width:5; filter:drop-shadow(0 0 3px #000)}
+
+/* 자동 촬영 1초: Shoot 버튼이 왼쪽부터 차오른다(--p 0~1). */
+.shutter.holding{background:linear-gradient(90deg, #cfe8c0 calc(var(--p,0) * 100%), var(--accent) 0); transition:none}
+/* 찍히는 순간 번쩍 */
+.flash{position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none}
+.flash.on{animation:flash .35s ease-out}
+@keyframes flash{from{opacity:.85} to{opacity:0}}
+
+/* 이사 안내(옛 주소 전용) */
+.moved{background:var(--warn); color:#0d1210; font-size:13px; line-height:1.4; padding:8px 12px}
+.moved a{color:#0d1210; font-weight:700}
+.moved[hidden]{display:none}
+.privacy a{color:var(--dim)}
+.install-tip{font-size:12px}
+.install-tip[hidden]{display:none}

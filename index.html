@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111413">
+<title>Ghost Cam — See your plant grow</title>
+<meta name="description" content="Shoot your plant any way you like, tap the pot rim twice, and see how much it grew since last time. Photos stay in your browser.">
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ghost Cam">
+</head>
+<body>
+
+<!-- 옛 주소(workers.dev)에서만 보이는 이사 안내. 사진은 주소(오리진)마다 따로 저장되므로 옛 주소에서 내보내야 한다. -->
+<div id="moved" class="moved" hidden>
+  Ghost Cam has moved to <a href="https://altair-research.github.io/ghost-cam/">altair-research.github.io/ghost-cam</a>.
+  Your photos here don't move by themselves — open <b>Log → Export all (ZIP)</b> first.
+</div>
+<header class="bar">
+  <select id="plantSelect" aria-label="Choose plant"></select>
+  <button id="addPlant" class="ghost-btn" title="Add plant">＋</button>
+  <span class="spacer"></span>
+  <!-- 버전은 항상 보이는 헤더에. 첫 화면 소개 안에 넣었더니 무대가 작은 폰에서 위가 잘려 안 보였다(2026-09-17). -->
+  <span id="ver" class="ver"></span>
+  <button id="galleryBtn" class="ghost-btn">Log</button>
+</header>
+
+<main id="camera">
+  <!-- 컷 목록. 기본은 하나(Side). 더 필요하면 ＋. 고른 컷을 한 번 더 누르면 이름 바꾸기/빼기. -->
+  <div id="views" class="views"></div>
+  <div id="stage" class="stage">
+    <video id="video" playsinline autoplay muted></video>
+    <img id="ghost" alt="" hidden>
+    <div id="grid" class="grid" hidden></div>
+    <svg id="liveRim" class="msvg live" viewBox="0 0 1280 1600" preserveAspectRatio="none" hidden></svg>
+    <div id="match" class="match" hidden></div>
+    <div id="tilt" class="tilt" hidden></div>
+    <div id="flash" class="flash"></div>
+    <div id="stageMsg" class="stage-msg">
+      <!-- 처음 여는 사람은 이게 뭔지, 왜 카메라가 필요한지를 여기서 읽고 버튼을 누른다.
+           별도 랜딩 페이지를 만들지 않는다 — 파일·캐시 목록·PWA 시작 URL이 늘어날 뿐이고,
+           설명은 버튼 위 몇 줄이면 충분하다. 카메라가 켜지면 이 블록은 사라진다. -->
+      <div class="intro" id="intro">
+        <h1>Ghost Cam</h1>
+        <p class="lead">Shoot your plant any way you like. Tap the pot rim twice. See how much it grew since last time.</p>
+        <ol class="steps">
+          <li>Add a plant and shoot it, pot in frame.</li>
+          <li>Tap the left and right edges of the pot rim.</li>
+          <li>Next time, the app lines the two photos up by the pot and shows the change.</li>
+        </ol>
+      </div>
+      <button id="startBtn" class="primary">Turn on camera</button>
+      <p class="hint" id="introHint">Your browser will ask for camera permission.</p>
+      <p class="privacy" id="introPrivacy">Photos stay in this device's browser.<br>Nothing is sent to a server, and no location is recorded.
+        <a href="privacy.html">Privacy</a></p>
+      <!-- 아이폰 사파리는 홈 화면에 설치하지 않은 사이트의 저장 데이터를 7일 뒤 지울 수 있다. 사진이 전부 브라우저 안에
+           있으므로, 설치 안내는 기능 설명이 아니라 데이터 보호다. 이미 설치해 연 경우(standalone)는 숨긴다. -->
+      <p class="hint install-tip" id="installTip">Tip: <b>Add to Home Screen</b> so your photos are kept safely.</p>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="shutter" class="shutter" disabled>Shoot</button>
+    <p id="status" class="status"></p>
+    <!-- 매번 쓰는 건 식물·카메라·Shoot 셋뿐이다. 나머지는 접어 둔다 — "너무 복잡하다"(2026-09-23 실사용). -->
+    <button id="moreBtn" class="more">More tools ▾</button>
+    <div id="adv" class="adv" hidden>
+      <label class="row">
+        <span>Ghost <b id="opacityVal">40%</b></span>
+        <input id="opacity" type="range" min="0" max="100" value="40">
+      </label>
+      <div class="row btns">
+        <button id="autoBtn" class="chip">Auto-shoot: on</button>
+        <button id="ghostBtn" class="chip on">Ghost: on</button>
+        <button id="modeBtn" class="chip" data-mode="normal">Mode: Overlay</button>
+        <button id="gridBtn" class="chip">Grid on</button>
+        <button id="flipBtn" class="chip">Flip camera</button>
+        <button id="restartBtn" class="chip">Restart camera</button>
+        <!-- 쓰지 않는 빈 요소. v32 이하의 옛 JS가 캐시에서 나와 이 새 HTML과 섞이는 첫 실행에 멈추지 않게 남겨 둔다
+             (v33부터 페이지도 캐시 우선이라 이런 섞임은 다시 안 생긴다). v35쯤 지워도 된다. -->
+        <input id="ghostFile" type="file" hidden>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- 촬영 직후. 여기서 화분 테두리 양끝을 탭한다 — 이게 이 앱의 핵심 동작이다(PROJECT.md §9).
+     꼭대기까지 탭하면 키가 나온다. 탭 없이 Save도 된다(그 사진은 비교에서 빠진다). -->
+<section id="review" class="sheet" hidden>
+  <div id="reviewStage" class="stage">
+    <img id="reviewImg" alt="Just taken">
+    <img id="reviewGhost" alt="" hidden>
+    <svg id="reviewSvg" class="msvg" viewBox="0 0 1280 1600"></svg>
+    <div id="reviewLayer" class="mark"></div>
+  </div>
+  <p id="reviewHint" class="hint"></p>
+  <div class="row btns">
+    <button id="compareBtn" class="chip">Ghost</button>
+    <button id="rimUndo" class="chip" disabled>Undo tap</button>
+    <button id="shareBtn" class="chip">Share</button>
+    <button id="retakeBtn" class="chip">Retake</button>
+    <button id="saveBtn" class="primary">Save</button>
+  </div>
+</section>
+
+<!-- 지난 사진과 비교. 지난 사진을 화분 크기·위치·기울기에 맞춰 변형해 지금 사진 위에 놓고, 슬라이더로 가른다. -->
+<section id="compare" class="sheet" hidden>
+  <div class="bar">
+    <h2 id="compareTitle">Then vs now</h2>
+    <span class="spacer"></span>
+    <button id="compareClose" class="ghost-btn">Close</button>
+  </div>
+  <div id="compareStage" class="stage">
+    <img id="compareNow" alt="Now">
+    <img id="compareThen" alt="Then">
+    <div id="wipeLine" class="wipe-line"></div>
+    <span id="labelThen" class="tag left"></span>
+    <span id="labelNow" class="tag right"></span>
+  </div>
+  <label class="row">
+    <span>Wipe</span>
+    <input id="wipe" type="range" min="0" max="100" value="50">
+  </label>
+  <p id="compareInfo" class="hint"></p>
+  <div class="row btns">
+    <button id="compareMode" class="chip">Mode: Wipe</button>
+    <button id="angleBtn" class="chip">Fix angle (2 more taps)</button>
+    <button id="alignedBtn" class="chip">Save now-photo in then-frame</button>
+  </div>
+</section>
+
+<section id="gallery" class="sheet" hidden>
+  <div class="bar">
+    <h2 id="galleryTitle">Log</h2>
+    <span class="spacer"></span>
+    <button id="galleryClose" class="ghost-btn">Close</button>
+  </div>
+  <div id="galleryViews" class="views"></div>
+  <div class="row btns">
+    <button id="stripBtn" class="chip">Side by side (JPEG)</button>
+    <button id="exportAll" class="chip">Export all (ZIP)</button>
+    <button id="potBtn" class="chip">Pot: — cm</button>
+    <label class="chip check"><input id="autoSave" type="checkbox"> Also download each shot</label>
+  </div>
+  <p id="storageInfo" class="hint"></p>
+  <div id="growth" class="growth" hidden></div>
+  <div id="shots" class="shots"></div>
+</section>
+
+<!-- 지난 사진의 테두리·꼭대기를 나중에 (다시) 찍는 화면. -->
+<section id="measure" class="sheet" hidden>
+  <div class="bar">
+    <h2 id="measureTitle">Mark pot rim</h2>
+    <span class="spacer"></span>
+    <button id="measureClose" class="ghost-btn">Cancel</button>
+  </div>
+  <div id="measureStage" class="stage">
+    <img id="measureImg" alt="">
+    <svg id="measureSvg" class="msvg" viewBox="0 0 1280 1600"></svg>
+    <div id="measureLayer" class="mark"></div>
+  </div>
+  <p id="measureHint" class="hint"></p>
+  <div class="row btns">
+    <button id="measureUndo" class="chip">Undo tap</button>
+    <button id="measureSave" class="primary" disabled>Save</button>
+  </div>
+</section>
+
+<canvas id="canvas" hidden></canvas>
+<script src="version.js"></script>
+<script src="app.js" type="module"></script>
+</body>
+</html>
