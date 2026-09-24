@@ -1420,7 +1420,12 @@ el.moreBtn.onclick = () => {
 el.galleryBtn.onclick = openGallery;
 el.galleryClose.onclick = closeGallery;
 el.exportAll.onclick = exportAll;
-el.importBtn.onclick = () => el.importFile.click();
+// 옛 주소에서 가져오면 옛 주소에 쌓일 뿐이다. 실사용에서 실제로 그렇게 됐다(2026-09-24, 홈 화면 아이콘이 옛 앱이었다).
+const OLD_HOST = location.hostname.endsWith('workers.dev');
+el.importBtn.onclick = () => {
+  if(OLD_HOST){ el.storageInfo.textContent = 'This is the old address. Import on the new one: altair-research.github.io/sprout-frame'; return; }
+  el.importFile.click();
+};
 el.importFile.onchange = async () => {
   const f = el.importFile.files && el.importFile.files[0];
   el.importFile.value = '';
