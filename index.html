@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#111413">
-<title>Ghost Cam — See your plant grow</title>
+<title>Sprout Frame — See your plant grow</title>
 <meta name="description" content="Shoot your plant any way you like, tap the pot rim twice, and see how much it grew since last time. Photos stay in your browser.">
 <link rel="stylesheet" href="style.css">
 <link rel="manifest" href="manifest.webmanifest">
@@ -12,13 +12,13 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Ghost Cam">
+<meta name="apple-mobile-web-app-title" content="Sprout Frame">
 </head>
 <body>
 
 <!-- 옛 주소(workers.dev)에서만 보이는 이사 안내. 사진은 주소(오리진)마다 따로 저장되므로 옛 주소에서 내보내야 한다. -->
 <div id="moved" class="moved" hidden>
-  Ghost Cam has moved to <a href="https://altair-research.github.io/ghost-cam/">altair-research.github.io/ghost-cam</a>.
+  Ghost Cam is now <b>Sprout Frame</b> at <a href="https://altair-research.github.io/sprout-frame/">altair-research.github.io/sprout-frame</a>.
   Your photos here don't move by themselves — open <b>Log → Export all (ZIP)</b> first.
 </div>
 <header class="bar">
@@ -46,7 +46,7 @@
            별도 랜딩 페이지를 만들지 않는다 — 파일·캐시 목록·PWA 시작 URL이 늘어날 뿐이고,
            설명은 버튼 위 몇 줄이면 충분하다. 카메라가 켜지면 이 블록은 사라진다. -->
       <div class="intro" id="intro">
-        <h1>Ghost Cam</h1>
+        <h1>Sprout Frame</h1>
         <p class="lead">Shoot your plant any way you like. Tap the pot rim twice. See how much it grew since last time.</p>
         <ol class="steps">
           <li>Add a plant and shoot it, pot in frame.</li>
@@ -144,6 +144,8 @@
   <div class="row btns">
     <button id="stripBtn" class="chip">Side by side (JPEG)</button>
     <button id="exportAll" class="chip">Export all (ZIP)</button>
+    <button id="importBtn" class="chip">Import (ZIP)</button>
+    <input id="importFile" type="file" accept=".zip,application/zip" hidden>
     <button id="potBtn" class="chip">Pot: — cm</button>
     <label class="chip check"><input id="autoSave" type="checkbox"> Also download each shot</label>
   </div>

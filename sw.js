@@ -4,7 +4,7 @@
 // ⚠️ 버전은 version.js 한 곳에서 올린다(화면에도 같은 값이 보인다).
 importScripts('./version.js');
 const VERSION = self.GC_VERSION;
-const CACHE = 'ghostcam-' + VERSION;
+const CACHE = 'sproutframe-' + VERSION;   // 옛 'ghostcam-*' 캐시는 activate에서 함께 지워진다
 
 const SHELL = [
   './',

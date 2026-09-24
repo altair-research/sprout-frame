@@ -1,4 +1,4 @@
-// Ghost Cam — 아무렇게나 찍어도 지난 사진과 비교해 주는 식물 성장 카메라.
+// Sprout Frame (2026-09-24까지 이름은 Ghost Cam) — 아무렇게나 찍어도 지난 사진과 비교해 주는 식물 성장 카메라.
 // 핵심 동작은 하나: 찍고 나서 화분 테두리 양끝을 탭한다. 그러면 앱이 지난 사진을
 // 화분 크기·위치·기울기에 맞춰 변형해 겹쳐 보여주고, 얼마나 컸는지 적는다(PROJECT.md §9).
 // 저장은 전부 브라우저 안(IndexedDB). 서버로 나가는 것 없음.
@@ -18,7 +18,7 @@ const DEFAULT_VIEWS = [
 const LEGACY_VIEW = 'front';    // 컷 개념이 생기기 전에 찍은 사진은 전부 이 컷으로 본다
 
 // ── IndexedDB (의존성 없이 최소한만) ──────────────────────────────
-const DB_NAME = 'ghostcam', DB_VER = 1;
+const DB_NAME = 'ghostcam', DB_VER = 1;   // 이름이 Sprout Frame으로 바뀌어도 DB 이름은 그대로 — 바꾸면 기존 사진이 안 보인다
 let _db;
 function db(){
   if(!_db) _db = new Promise((res, rej) => {
@@ -61,7 +61,7 @@ const el = {
   gallery:$('gallery'), galleryTitle:$('galleryTitle'), galleryClose:$('galleryClose'),
   galleryViews:$('galleryViews'),
   shots:$('shots'), storageInfo:$('storageInfo'), growth:$('growth'),
-  exportAll:$('exportAll'), stripBtn:$('stripBtn'), potBtn:$('potBtn'), autoSave:$('autoSave'),
+  exportAll:$('exportAll'), importBtn:$('importBtn'), importFile:$('importFile'), stripBtn:$('stripBtn'), potBtn:$('potBtn'), autoSave:$('autoSave'),
   measure:$('measure'), measureTitle:$('measureTitle'), measureClose:$('measureClose'),
   measureStage:$('measureStage'), measureImg:$('measureImg'), measureSvg:$('measureSvg'), measureLayer:$('measureLayer'),
   measureHint:$('measureHint'), measureUndo:$('measureUndo'), measureSave:$('measureSave'),
@@ -1052,16 +1052,140 @@ async function exportAll(){
         let name = `${folder}/${folder}-${shotView(sh)}-${sh.date}`, i = 2;
         while(seen.has(name)) name = `${folder}/${folder}-${shotView(sh)}-${sh.date}-${i++}`;
         seen.add(name);
+        sh._file = name + '.jpg';
         return {name:name + '.jpg', blob:sh.blob, date:new Date(sh.ts)};
       });
+    // 사진만 담으면 테두리 탭·기울기·컷·화분 지름이 빠져, 다른 주소나 기기로 옮기면 비교·키 재기를 다시 해야 한다.
+    // 그래서 메타데이터를 JSON 한 장으로 같이 넣는다. 가져오기가 이것을 읽는다(없으면 사진만 가져온다).
+    const meta = {app:'sprout-frame', format:1, exported:new Date().toISOString(),
+      plants: state.plants.map(p => ({id:p.id, name:p.name, createdAt:p.createdAt, views:p.views, potCm:p.potCm, folder:nameOf[p.id]})),
+      shots: shots.map(s => ({file:s._file, plantId:s.plantId, view:s.view, ts:s.ts, date:s.date, w:s.w, h:s.h, tilt:s.tilt, measure:s.measure}))};
+    shots.forEach(s => delete s._file);
+    entries.push({name:'sproutframe.json', blob:new Blob([JSON.stringify(meta, null, 1)], {type:'application/json'}), date:new Date()});
     const zip = await makeZip(entries);
-    download(zip, `ghostcam-backup-${today()}.zip`);
-    say(`Exported ${entries.length} photo${entries.length === 1 ? '' : 's'} as one ZIP (${(zip.size / 1048576).toFixed(1)}MB).`);
+    download(zip, `sproutframe-backup-${today()}.zip`);
+    const n = entries.length - 1;
+    say(`Exported ${n} photo${n === 1 ? '' : 's'} as one ZIP (${(zip.size / 1048576).toFixed(1)}MB).`);
   }catch(err){
     say(`Export failed: ${err.name}. With many photos the browser may run out of memory.`, true);
   }finally{
     el.exportAll.disabled = false;
     el.exportAll.textContent = 'Export all (ZIP)';
+  }
+}
+
+// ── 가져오기 (ZIP) ────────────────────────────────────────────────
+// 내보낸 ZIP을 다시 넣는다. 주소를 옮기거나(2026-09-24 Cloudflare → GitHub Pages) 폰을 바꿀 때 필요하다.
+// 사진은 주소(오리진)마다 따로 저장되므로, 내보내기만 있고 가져오기가 없으면 이사가 반쪽이었다.
+// - sproutframe.json이 있으면(v36 이후 내보내기) 식물·컷·화분 지름·테두리 탭·기울기까지 되살린다.
+// - 없으면(옛 내보내기) 파일 이름 `폴더/폴더-컷-날짜(-시각).jpg` 또는 `폴더/폴더-날짜.jpg`에서 식물과 날짜만 읽는다.
+//   테두리 탭은 Log의 Tap rim으로 다시 하면 된다.
+// - 같은 식물·같은 시각(없으면 같은 날짜+같은 크기)의 사진이 이미 있으면 건너뛴다 — 두 번 가져와도 겹치지 않게.
+// ZIP 해석은 직접 한다. 우리 내보내기는 무압축(STORE)이고, 사용자가 다시 압축한 ZIP(deflate)은 브라우저 내장
+// DecompressionStream으로 푼다. 라이브러리를 들이지 않는다(의존성 0개).
+async function readZip(file){
+  const buf = new Uint8Array(await file.arrayBuffer()), dv = new DataView(buf.buffer);
+  let eocd = -1;
+  for(let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--){ if(dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; } }
+  if(eocd < 0) throw new Error('Not a ZIP file');
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const dec = new TextDecoder(), out = [];
+  for(let k = 0; k < count; k++){
+    if(dv.getUint32(p, true) !== 0x02014b50) throw new Error('Broken ZIP directory');
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true);
+    const dt = dv.getUint16(p + 12, true), dd = dv.getUint16(p + 14, true);   // DOS 시각·날짜 — 내보내기가 촬영 시각을 넣어 둔다
+    const mtime = new Date(1980 + (dd >> 9), ((dd >> 5) & 15) - 1, dd & 31, dt >> 11, (dt >> 5) & 63, (dt & 31) * 2).getTime();
+    const nlen = dv.getUint16(p + 28, true), xlen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true);
+    const local = dv.getUint32(p + 42, true);
+    const name = dec.decode(buf.subarray(p + 46, p + 46 + nlen));
+    p += 46 + nlen + xlen + clen;
+    if(name.endsWith('/')) continue;
+    const lstart = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
+    const raw = buf.subarray(lstart, lstart + csize);
+    let data;
+    if(method === 0) data = raw;
+    else if(method === 8) data = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+    else continue;
+    out.push({name, data, mtime});
+  }
+  return out;
+}
+async function importZip(file){
+  el.importBtn.disabled = true; el.importBtn.textContent = 'Importing…';
+  try{
+    const files = await readZip(file);
+    const metaFile = files.find(f => f.name.split('/').pop() === 'sproutframe.json');
+    const meta = metaFile ? JSON.parse(new TextDecoder().decode(metaFile.data)) : null;
+    const existing = await dbGetAll('shots');
+    const plantsByName = new Map(state.plants.map(p => [p.name, p]));
+    const plantsBySlug = new Map(state.plants.map(p => [slug(p.name), p]));
+    const idMap = {};                 // 내보낸 식물 id → 여기 식물
+    const ensurePlant = async (name, extra) => {
+      let p = plantsByName.get(name) || plantsBySlug.get(slug(name));
+      if(!p){
+        p = {id:uid(), name, createdAt:Date.now()};
+        state.plants.push(p); plantsByName.set(name, p); plantsBySlug.set(slug(name), p);
+      }
+      if(extra){
+        if(extra.views && !p.views) p.views = extra.views;
+        if(extra.potCm && !p.potCm) p.potCm = extra.potCm;
+      }
+      await dbPut('plants', p);
+      return p;
+    };
+    let added = 0, skipped = 0;
+    const byFile = new Map(files.map(f => [f.name, f]));
+    const jobs = [];
+    if(meta){
+      for(const mp of meta.plants || []) idMap[mp.id] = await ensurePlant(mp.name, mp);
+      for(const ms of meta.shots || []){
+        const f = byFile.get(ms.file); const p = idMap[ms.plantId];
+        if(f && p) jobs.push({p, f, rec:ms});
+      }
+    }else{
+      for(const f of files){
+        if(!/\.jpe?g$/i.test(f.name)) continue;
+        const parts = f.name.split('/'), folder = parts.length > 1 ? parts[0] : 'imported';
+        const m = parts.pop().match(/(\d{4}-\d{2}-\d{2})(?:-(\d{2})(\d{2}))?(?:-\d+)?\.jpe?g$/i);
+        if(!m) continue;
+        const [y, mo, d] = m[1].split('-').map(Number);
+        // 시각: 파일 이름에 있으면 그것, 없으면 ZIP에 기록된 파일 시각(같은 날짜일 때만), 그것도 없으면 정오.
+        // 처음엔 이름에 시각이 없으면 모두 정오로 잡아, 같은 날 찍은 사진들이 서로를 "중복"으로 지웠다(검증 중 발견).
+        const zd = new Date(f.mtime);
+        const zipSameDay = zd.getFullYear() === y && zd.getMonth() === mo - 1 && zd.getDate() === d;
+        const ts = m[2] ? new Date(y, mo - 1, d, +m[2], +m[3]).getTime()
+                 : zipSameDay ? f.mtime : new Date(y, mo - 1, d, 12).getTime();
+        const p = await ensurePlant(folder);
+        const base = parts.length ? f.name.split('/').pop() : f.name;
+        const rest = base.replace(folder + '-', '').replace(/-?\d{4}-\d{2}-\d{2}.*$/, '');
+        const view = viewsOf(p).some(v => v.id === rest) ? rest : LEGACY_VIEW;
+        jobs.push({p, f, rec:{ts, date:m[1], view, w:TARGET_W, h:TARGET_H}});
+      }
+    }
+    for(const {p, f, rec} of jobs){
+      // 중복 판정: 메타가 있으면 촬영 시각(ts)으로, 없으면 날짜 + 파일 크기로(시각은 추정값일 수 있으므로).
+      const dup = existing.some(s => s.plantId === p.id &&
+        (meta ? s.ts === rec.ts : (s.date === rec.date && s.blob.size === f.data.length && Math.abs(s.ts - rec.ts) < 60000)));
+      if(dup){ skipped++; continue; }
+      const shot = {id:uid(), plantId:p.id, view:rec.view || LEGACY_VIEW, ts:rec.ts, date:rec.date,
+        w:rec.w || TARGET_W, h:rec.h || TARGET_H, blob:new Blob([f.data], {type:'image/jpeg'}),
+        tilt:rec.tilt, measure:rec.measure};
+      await dbPut('shots', shot); existing.push(shot); added++;
+    }
+    state.plants.sort((a, b) => a.createdAt - b.createdAt);
+    if(!state.plantId && state.plants.length) state.plantId = state.plants[0].id;
+    renderPlants(); await renderViews(); await refreshGhost();
+    el.storageInfo.textContent = `Imported ${added} photo${added === 1 ? '' : 's'}` +
+      (skipped ? `, skipped ${skipped} already here` : '') +
+      (meta ? '.' : '. Old backup without details — use Tap rim on each photo to compare again.');
+    await openGallery();
+    el.storageInfo.textContent = `Imported ${added}` + (skipped ? `, skipped ${skipped} already here` : '') +
+      (meta ? ' (with rim taps and angles).' : '. This backup had photos only — tap the rim again in the Log to compare.');
+  }catch(err){
+    el.storageInfo.textContent = `Import failed: ${err.message || err.name}`;
+  }finally{
+    el.importBtn.disabled = false; el.importBtn.textContent = 'Import (ZIP)';
   }
 }
 
@@ -1296,6 +1420,12 @@ el.moreBtn.onclick = () => {
 el.galleryBtn.onclick = openGallery;
 el.galleryClose.onclick = closeGallery;
 el.exportAll.onclick = exportAll;
+el.importBtn.onclick = () => el.importFile.click();
+el.importFile.onchange = async () => {
+  const f = el.importFile.files && el.importFile.files[0];
+  el.importFile.value = '';
+  if(f) await importZip(f);
+};
 el.stripBtn.onclick = exportStrip;
 el.autoSave.onchange = () => {
   localStorage.setItem('gc.autosave', el.autoSave.checked ? 'yes' : 'no');
