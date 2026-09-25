@@ -45,6 +45,7 @@ const $ = id => document.getElementById(id);
 const el = {
   plantBtn:$('plantBtn'), plantNameEl:$('plantName'), addPlant:$('addPlant'),
   picker:$('picker'), plantGrid:$('plantGrid'), pickerClose:$('pickerClose'), labelsBtn:$('labelsBtn'),
+  plantToast:$('plantToast'), blankBtn:$('blankBtn'),
   labels:$('labels'), labelGrid:$('labelGrid'), labelsHint:$('labelsHint'), printBtn:$('printBtn'), labelsClose:$('labelsClose'), galleryBtn:$('galleryBtn'), ver:$('ver'),
   views:$('views'),
   stage:$('stage'), video:$('video'), ghost:$('ghost'), grid:$('grid'), tilt:$('tilt'),
@@ -182,12 +183,25 @@ async function openPicker(){
   el.picker.hidden = false;
 }
 function closePicker(){ el.picker.hidden = true; _pickerUrls.forEach(dropURL); _pickerUrls = []; }
-async function addPlant(){
-  const name = prompt('Plant name (used in file names)');
-  if(!name || !name.trim()) return;
-  const p = {id:uid(), name:name.trim(), createdAt:Date.now(), tag:newTag()};
+// 같은 이름이 있으면 번호를 붙인다(Avocado → Avocado 2 → Avocado 3). 같은 종을 여러 그루 키우는 경우(2026-09-25 아보카도).
+// 같은 이름 두 개를 허용하면 목록에서 구분이 안 되고 내보내기 폴더가 섞인다 — 이름 바꾸기도 같은 이유로 막고 있다.
+function uniqueName(base){
+  const taken = new Set(state.plants.map(p => p.name.toLowerCase()));
+  if(!taken.has(base.toLowerCase())) return base;
+  let n = 2; while(taken.has(`${base} ${n}`.toLowerCase())) n++;
+  return `${base} ${n}`;
+}
+// tag를 주면 그 라벨(빈 라벨)에 새 식물을 묶는다.
+async function addPlant(tag){
+  const ask = typeof tag === 'string'
+    ? 'New label. Name the plant it is on (a number is added if the name is taken)'
+    : 'Plant name (a number is added if the name is taken)';
+  const name = prompt(ask);
+  if(!name || !name.trim()) return null;
+  const p = {id:uid(), name:uniqueName(name.trim()), createdAt:Date.now(), tag:typeof tag === 'string' ? tag : newTag()};
   await dbPut('plants', p); state.plants.push(p);
   await selectPlant(p.id);
+  return p;
 }
 
 // ── QR 태그 ───────────────────────────────────────────────────────
@@ -203,22 +217,47 @@ const tagFrom = text => { const m = /[#&?]t=([a-z0-9]{4,12})\b/.exec(text || '')
 async function ensureTags(){
   for(const p of state.plants) if(!p.tag){ p.tag = newTag(); await dbPut('plants', p); }
 }
+// 빈 라벨: 아직 어느 식물에도 묶이지 않은 태그. 새 식물이 오면 붙이고 카메라로 찍어 그 자리에서 이름을 준다.
+// 태그는 어디에도 저장하지 않는다 — 무작위 6자(31^6 ≈ 8억)라 겹칠 걱정이 없고, 처음 찍힐 때 식물에 묶인다.
+const BLANK_COUNT = 12;
+let _labelMode = 'plants';
 async function openLabels(){
   await ensureTags();
-  el.labelGrid.innerHTML = state.plants.map(p =>
-    `<div class="label">${qrSvg(tagURL(p.tag))}<div class="name">${esc(p.name)}</div></div>`).join('');
+  const blank = _labelMode === 'blank';
+  el.blankBtn.textContent = blank ? 'Plant labels' : 'Blank labels';
+  el.labelGrid.innerHTML = blank
+    ? Array.from({length:BLANK_COUNT}, () =>
+        `<div class="label">${qrSvg(tagURL(newTag()))}<div class="name blank"></div></div>`).join('')
+    : state.plants.map(p =>
+        `<div class="label">${qrSvg(tagURL(p.tag))}<div class="name">${esc(p.name)}</div></div>`).join('');
+  if(blank){
+    el.labelsHint.textContent = 'Blank labels for new plants. Stick one on a new pot, write the name on it, and point the camera at it — the app asks for the name and makes the plant. Print at 100% scale: each label is 3 cm.';
+    el.labels.hidden = false; return;
+  }
   el.labelsHint.textContent = (SCAN ? 'Stick a label on each pot where the camera sees it. When a label is in view, the app switches to that plant by itself. '
                                     : 'Stick a label on each pot. Scan it with your phone\'s camera app to open that plant here. ') +
     'Print at 100% scale: each label is 3 cm.';
   el.labels.hidden = false;
 }
 // 태그로 식물 전환. 모르는 태그는 다른 기기(또는 지운 식물)의 라벨이다.
+// 모르는 태그 = 빈 라벨(또는 다른 기기의 라벨) → 새 식물을 만들지 묻는다. 취소하면 아무것도 안 한다.
 async function goToTag(tag, how){
-  const p = state.plants.find(o => o.tag === tag);
-  if(!p){ say(`This QR label isn't for a plant in this browser.`, true); return false; }
-  if(p.id !== state.plantId) await selectPlant(p.id);
+  let p = state.plants.find(o => o.tag === tag);
+  if(!p){
+    p = await addPlant(tag);
+    if(!p){ say('Label not linked to any plant. Point the camera at it again to name it.'); return false; }
+  }else if(p.id !== state.plantId) await selectPlant(p.id);
   say(`${how}: ${p.name}`);
+  showPlantToast(p.name);
   return true;
+}
+let _toastTimer = 0;
+function showPlantToast(name){
+  el.plantToast.textContent = `🌱 ${name}`;
+  el.plantToast.hidden = false;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.plantToast.hidden = true; }, 1800);
+  if(navigator.vibrate) navigator.vibrate(60);
 }
 // 주소로 들어온 경우(폰 기본 카메라로 라벨을 찍었을 때). 처리한 뒤 주소에서 지운다 — 새로고침 때 다시 바뀌지 않게.
 async function tagFromLocation(){
@@ -249,7 +288,10 @@ async function scanTick(){
     // 사용자가 다른 식물을 고르면 즉시 되돌아간다. 5초 넘게 안 보였다가 다시 보이면 새로 본 것으로 친다.
     const now = Date.now(), fresh = tag !== _lastTag || now - _lastTagAt > 5000;
     _lastTag = tag; _lastTagAt = now;
-    if(fresh) await goToTag(tag, 'QR label');
+    if(fresh){
+      await goToTag(tag, 'QR label');
+      _lastTagAt = Date.now();     // 이름 묻는 창이 떠 있던 동안은 '안 보인 시간'으로 치지 않는다 — 닫자마자 또 묻지 않게
+    }
   }catch(e){ /* 한 프레임 실패는 무시 — 다음 틱에 다시 */ }
   finally{ _scanBusy = false; }
 }
@@ -1464,9 +1506,10 @@ el.shutter.onclick = capture;
 el.opacity.oninput = applyOpacity;
 
 el.plantBtn.onclick = openPicker;
-el.addPlant.onclick = addPlant;
+el.addPlant.onclick = () => addPlant();
 el.pickerClose.onclick = closePicker;
-el.labelsBtn.onclick = openLabels;
+el.labelsBtn.onclick = () => { _labelMode = 'plants'; openLabels(); };
+el.blankBtn.onclick = () => { _labelMode = _labelMode === 'blank' ? 'plants' : 'blank'; openLabels(); };
 el.labelsClose.onclick = () => { el.labels.hidden = true; };
 el.printBtn.onclick = () => print();
 window.addEventListener('hashchange', tagFromLocation);

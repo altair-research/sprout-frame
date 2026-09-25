@@ -134,6 +134,14 @@ input[type=range]{flex:1; accent-color:var(--accent)}
 .label{width:30mm; color:#000; text-align:center; font-size:9pt; line-height:1.2; break-inside:avoid}
 .label svg{width:30mm; height:30mm; display:block}
 .label .name{margin-top:1mm; overflow-wrap:anywhere}
+.label .name.blank{border-bottom:0.3mm solid #000; height:5mm}   /* 손으로 이름을 적을 자리 */
+.plant-toast{
+  position:absolute; left:50%; top:40%; transform:translate(-50%,-50%); z-index:5;
+  background:rgba(17,20,19,.85); color:var(--fg); border:2px solid var(--accent);
+  border-radius:14px; padding:14px 22px; font-size:22px; font-weight:700; text-align:center;
+  max-width:85%; pointer-events:none;
+}
+.plant-toast[hidden]{display:none}
 @media print{
   body > *:not(#labels){display:none !important}
   #labels{position:static; padding:0; background:#fff}
