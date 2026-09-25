@@ -11,6 +11,7 @@ const SHELL = [
   './index.html',
   './style.css',
   './app.js',
+  './qr.js',
   './version.js',
   './manifest.webmanifest',
   './privacy.html',

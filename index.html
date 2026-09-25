@@ -23,7 +23,8 @@
   To move your photos: here <b>Log → Export all</b>, then on the new address <b>Log → Import</b>.
 </div>
 <header class="bar">
-  <select id="plantSelect" aria-label="Choose plant"></select>
+  <!-- 이름만 있는 드롭다운이었다. 식물이 늘자 이름만으로는 어느 화분인지 헷갈린다(2026-09-25 사용자) → 사진 격자에서 고른다. -->
+  <button id="plantBtn" class="plant-btn" aria-label="Choose plant"><span id="plantName"></span> ▾</button>
   <button id="addPlant" class="ghost-btn" title="Add plant">＋</button>
   <span class="spacer"></span>
   <!-- 버전은 항상 보이는 헤더에. 첫 화면 소개 안에 넣었더니 무대가 작은 폰에서 위가 잘려 안 보였다(2026-09-17). -->
@@ -154,6 +155,30 @@
   <p id="storageInfo" class="hint"></p>
   <div id="growth" class="growth" hidden></div>
   <div id="shots" class="shots"></div>
+</section>
+
+<!-- 식물 고르기. 식물마다 가장 최근 사진을 붙여 보여 준다. 순서는 만든 순서로 고정 — 최근 찍은 순으로 하면
+     찍을 때마다 자리가 바뀌어 "늘 거기 있던 그 칸"으로 찾을 수가 없다. -->
+<section id="picker" class="sheet" hidden>
+  <div class="bar">
+    <h2>Plants</h2>
+    <span class="spacer"></span>
+    <button id="labelsBtn" class="ghost-btn">QR labels</button>
+    <button id="pickerClose" class="ghost-btn">Close</button>
+  </div>
+  <div id="plantGrid" class="shots"></div>
+</section>
+
+<!-- 인쇄용 QR 라벨. 라벨 내용은 이 앱 주소 + 식물 태그 → 폰 기본 카메라로 찍어도 그 식물로 열린다(아이폰 포함). -->
+<section id="labels" class="sheet" hidden>
+  <div class="bar">
+    <h2>QR labels</h2>
+    <span class="spacer"></span>
+    <button id="printBtn" class="ghost-btn">Print</button>
+    <button id="labelsClose" class="ghost-btn">Close</button>
+  </div>
+  <p id="labelsHint" class="hint"></p>
+  <div id="labelGrid" class="labels"></div>
 </section>
 
 <!-- 지난 사진의 테두리·꼭대기를 나중에 (다시) 찍는 화면. -->

@@ -27,6 +27,11 @@ select{
   border-radius:8px; padding:8px 10px; font:inherit; max-width:55vw;
 }
 button{font:inherit; cursor:pointer}
+.plant-btn{
+  background:var(--panel); color:var(--fg); border:1px solid var(--line);
+  border-radius:8px; padding:8px 10px; max-width:55vw;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
 .ghost-btn{
   background:transparent; color:var(--fg); border:1px solid var(--line);
   border-radius:8px; padding:8px 12px;
@@ -115,6 +120,26 @@ input[type=range]{flex:1; accent-color:var(--accent)}
 .shot .acts button{flex:1 1 30%; font-size:12px; padding:6px 0; background:transparent;
   color:var(--fg); border:1px solid var(--line); border-radius:6px}
 .shot.is-ref{border-color:var(--accent)}
+
+/* 식물 고르기 */
+.shot.pick{cursor:pointer; text-align:left; padding:0; color:var(--fg); font:inherit}
+.shot.pick.on{border-color:var(--accent)}
+.shot.pick .name{padding:8px 8px 0; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.shot.pick .noimg{width:100%; aspect-ratio:4/5; display:grid; place-items:center; background:#000; color:var(--dim); font-size:28px}
+
+/* QR 라벨 — 크기는 mm로 고정해 인쇄 배율 100%면 실제 3cm가 나온다.
+   3cm의 근거: 버전 4(33칸+여백 8칸=41칸)라 한 칸이 약 0.73mm. 폰으로 식물 전체를 담는 거리(40~60cm)에서
+   2560px 폭 영상이면 한 칸이 3px 안팎 — 인식에 필요한 최소(2~3px)를 겨우 넘긴다. 더 작게 하면 가까이 가야 읽힌다. */
+.labels{display:flex; flex-wrap:wrap; gap:6mm; background:#fff; padding:6mm; border-radius:8px}
+.label{width:30mm; color:#000; text-align:center; font-size:9pt; line-height:1.2; break-inside:avoid}
+.label svg{width:30mm; height:30mm; display:block}
+.label .name{margin-top:1mm; overflow-wrap:anywhere}
+@media print{
+  body > *:not(#labels){display:none !important}
+  #labels{position:static; padding:0; background:#fff}
+  #labels > :not(.labels){display:none}
+  .labels{padding:0}
+}
 
 @media (min-width:900px){
   #camera .stage{max-width:480px}

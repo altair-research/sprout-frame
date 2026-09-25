@@ -3,6 +3,8 @@
 // 화분 크기·위치·기울기에 맞춰 변형해 겹쳐 보여주고, 얼마나 컸는지 적는다(PROJECT.md §9).
 // 저장은 전부 브라우저 안(IndexedDB). 서버로 나가는 것 없음.
 
+import {qrSvg} from './qr.js';
+
 const TARGET_W = 1280;          // 출력 폭  = 4:5. Uncommon Plant 사이트가 사진을 4:5 박스에 object-fit:cover로
                                 //          넣기 때문에, 3:4로 찍으면 위아래 6%가 잘렸다.
 const TARGET_H = 1600;          // 출력 높이 = 긴 변 1600 (optimize-photos.mjs의 MAX_EDGE와 같음)
@@ -41,7 +43,9 @@ async function dbDel(store, key){ const d = await db(); return wrap(d.transactio
 // ── DOM ───────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const el = {
-  plantSelect:$('plantSelect'), addPlant:$('addPlant'), galleryBtn:$('galleryBtn'), ver:$('ver'),
+  plantBtn:$('plantBtn'), plantNameEl:$('plantName'), addPlant:$('addPlant'),
+  picker:$('picker'), plantGrid:$('plantGrid'), pickerClose:$('pickerClose'), labelsBtn:$('labelsBtn'),
+  labels:$('labels'), labelGrid:$('labelGrid'), labelsHint:$('labelsHint'), printBtn:$('printBtn'), labelsClose:$('labelsClose'), galleryBtn:$('galleryBtn'), ver:$('ver'),
   views:$('views'),
   stage:$('stage'), video:$('video'), ghost:$('ghost'), grid:$('grid'), tilt:$('tilt'),
   match:$('match'), liveRim:$('liveRim'), flash:$('flash'),
@@ -89,7 +93,7 @@ const state = {
   tiltF: null,                // 부드럽게 한(EMA) 실수 기울기. 판정은 이것으로, 저장은 반올림한 state.tilt로
   ghostVec: null,             // 고스트 사진을 작게 줄인 밝기 벡터(화면 일치도 계산용)
   match: null,                // 지금 화면과 고스트의 일치도(-1~1). null이면 계산 안 함
-  matchTimer: 0,
+  matchTimer: 0, scanTimer: 0,
   urls: new Set(),            // 회수해야 할 objectURL
 };
 
@@ -129,15 +133,125 @@ async function loadPlants(){
 }
 function renderPlants(){
   if(!state.plants.length){
-    el.plantSelect.innerHTML = '<option value="">— add a plant —</option>';
-    el.plantSelect.value = ''; state.plantId = null;
+    el.plantNameEl.textContent = 'Add a plant'; state.plantId = null;
     localStorage.removeItem('gc.plant');
     return;
   }
-  el.plantSelect.innerHTML = state.plants
-    .map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
-  el.plantSelect.value = state.plantId;
+  el.plantNameEl.textContent = plantName();
   localStorage.setItem('gc.plant', state.plantId);
+}
+async function selectPlant(id){
+  state.plantId = id;
+  state.ghostSource = 'latest';
+  state.galleryView = null;
+  renderPlants();
+  await renderViews();
+  await refreshGhost();
+}
+
+// ── 식물 고르기(사진 격자) ─────────────────────────────────────────
+// 각 식물의 가장 최근 사진(컷 무관)을 붙인다. 사진이 이름보다 빨리 알아보인다.
+let _pickerUrls = [];
+async function openPicker(){
+  if(!state.plants.length){ await addPlant(); return; }
+  _pickerUrls.forEach(dropURL); _pickerUrls = [];
+  const shots = await dbGetAll('shots');
+  const byPlant = new Map();
+  for(const s of shots){
+    const o = byPlant.get(s.plantId) || {n:0, latest:null};
+    o.n++; if(!o.latest || s.ts > o.latest.ts) o.latest = s;
+    byPlant.set(s.plantId, o);
+  }
+  el.plantGrid.innerHTML = '';
+  for(const p of state.plants){
+    const o = byPlant.get(p.id) || {n:0, latest:null};
+    const b = document.createElement('button');
+    b.className = 'shot pick' + (p.id === state.plantId ? ' on' : '');
+    let img = '<div class="noimg">🌱</div>';
+    if(o.latest){ const u = objURL(o.latest.blob); _pickerUrls.push(u); img = `<img src="${u}" alt="" loading="lazy">`; }
+    b.innerHTML = `${img}<div class="name">${esc(p.name)}</div>` +
+      `<div class="meta">${o.n ? `${o.n} photo${o.n === 1 ? '' : 's'} · last ${o.latest.date}` : 'No photos yet'}</div>`;
+    b.onclick = async () => { closePicker(); if(p.id !== state.plantId) await selectPlant(p.id); };
+    el.plantGrid.appendChild(b);
+  }
+  const add = document.createElement('button');
+  add.className = 'shot pick';
+  add.innerHTML = '<div class="noimg">＋</div><div class="name">New plant</div><div class="meta">&nbsp;</div>';
+  add.onclick = async () => { closePicker(); await addPlant(); };
+  el.plantGrid.appendChild(add);
+  el.picker.hidden = false;
+}
+function closePicker(){ el.picker.hidden = true; _pickerUrls.forEach(dropURL); _pickerUrls = []; }
+async function addPlant(){
+  const name = prompt('Plant name (used in file names)');
+  if(!name || !name.trim()) return;
+  const p = {id:uid(), name:name.trim(), createdAt:Date.now(), tag:newTag()};
+  await dbPut('plants', p); state.plants.push(p);
+  await selectPlant(p.id);
+}
+
+// ── QR 태그 ───────────────────────────────────────────────────────
+// 라벨에는 식물 id가 아니라 따로 만든 짧은 태그를 넣는다. id는 가져오기(Import)할 때 새로 매겨지므로
+// id를 넣으면 백업을 옮긴 기기에서 라벨이 안 먹는다. 태그는 내보내기·가져오기로 함께 옮겨진다.
+// 헷갈리는 글자(0/o, 1/l/i)는 뺐다 — 사람이 라벨을 옮겨 적을 일이 생겨도 안전하게.
+const TAG_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
+const newTag = () => { const a = crypto.getRandomValues(new Uint8Array(6)); return [...a].map(v => TAG_CHARS[v % TAG_CHARS.length]).join(''); };
+// 라벨 내용은 이 앱의 주소 + #t=태그. 앱 안에서 스캔해도 되고, 폰 기본 카메라로 찍으면 브라우저/앱이 그 식물로 열린다.
+// 주소는 지금 열린 곳 기준 — 로컬 테스트에서 만든 라벨은 로컬을 가리킨다(공개 주소에서 다시 만들면 된다).
+const tagURL = tag => `${location.origin}${location.pathname.replace(/index\.html$/, '')}#t=${tag}`;
+const tagFrom = text => { const m = /[#&?]t=([a-z0-9]{4,12})\b/.exec(text || ''); return m ? m[1] : null; };
+async function ensureTags(){
+  for(const p of state.plants) if(!p.tag){ p.tag = newTag(); await dbPut('plants', p); }
+}
+async function openLabels(){
+  await ensureTags();
+  el.labelGrid.innerHTML = state.plants.map(p =>
+    `<div class="label">${qrSvg(tagURL(p.tag))}<div class="name">${esc(p.name)}</div></div>`).join('');
+  el.labelsHint.textContent = (SCAN ? 'Stick a label on each pot where the camera sees it. When a label is in view, the app switches to that plant by itself. '
+                                    : 'Stick a label on each pot. Scan it with your phone\'s camera app to open that plant here. ') +
+    'Print at 100% scale: each label is 3 cm.';
+  el.labels.hidden = false;
+}
+// 태그로 식물 전환. 모르는 태그는 다른 기기(또는 지운 식물)의 라벨이다.
+async function goToTag(tag, how){
+  const p = state.plants.find(o => o.tag === tag);
+  if(!p){ say(`This QR label isn't for a plant in this browser.`, true); return false; }
+  if(p.id !== state.plantId) await selectPlant(p.id);
+  say(`${how}: ${p.name}`);
+  return true;
+}
+// 주소로 들어온 경우(폰 기본 카메라로 라벨을 찍었을 때). 처리한 뒤 주소에서 지운다 — 새로고침 때 다시 바뀌지 않게.
+async function tagFromLocation(){
+  const t = tagFrom(location.hash);
+  if(!t) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  await goToTag(t, 'QR label');
+}
+
+// 카메라 속 라벨 읽기. 안드로이드 크롬에 내장된 BarcodeDetector를 쓴다(라이브러리 없음).
+// 아이폰 사파리·윈도 크롬에는 없다 — 그때는 라벨을 폰 기본 카메라로 찍는 쪽(위 주소 방식)으로 간다.
+const SCAN = 'BarcodeDetector' in self;
+let _detector = null, _scanBusy = false, _lastTag = null, _lastTagAt = 0;
+async function scanTick(){
+  if(_scanBusy || !state.stream || !el.review.hidden || !el.gallery.hidden || !el.picker.hidden || !el.labels.hidden) return;
+  if(!el.video.videoWidth) return;
+  _scanBusy = true;
+  try{
+    if(!_detector){
+      const fmts = await BarcodeDetector.getSupportedFormats();
+      if(!fmts.includes('qr_code')){ clearInterval(state.scanTimer); state.scanTimer = -1; return; }
+      _detector = new BarcodeDetector({formats:['qr_code']});
+    }
+    const codes = await _detector.detect(el.video);
+    const tag = codes.map(c => tagFrom(c.rawValue)).find(Boolean);
+    if(!tag) return;
+    // 같은 라벨이 계속 보이는 동안은 한 번만 바꾼다. 안 그러면 라벨이 화면에 있는 채로
+    // 사용자가 다른 식물을 고르면 즉시 되돌아간다. 5초 넘게 안 보였다가 다시 보이면 새로 본 것으로 친다.
+    const now = Date.now(), fresh = tag !== _lastTag || now - _lastTagAt > 5000;
+    _lastTag = tag; _lastTagAt = now;
+    if(fresh) await goToTag(tag, 'QR label');
+  }catch(e){ /* 한 프레임 실패는 무시 — 다음 틱에 다시 */ }
+  finally{ _scanBusy = false; }
 }
 const plant = () => state.plants.find(p => p.id === state.plantId) || null;
 const plantName = () => (plant() || {}).name || 'plant';
@@ -466,6 +580,8 @@ async function startCamera(){
   el.stageMsg.hidden = true;
   el.shutter.disabled = false;
   if(!state.matchTimer) state.matchTimer = setInterval(matchTick, 125);   // 초당 8번
+  // 라벨 읽기는 초당 2번이면 충분하다. 식물을 바꾸는 건 드문 일이고, 매치 계산과 겹치면 폰이 버벅인다.
+  if(SCAN && !state.scanTimer) state.scanTimer = setInterval(scanTick, 500);
   watchStream(state.stream);
   reportResolution();
 }
@@ -1076,7 +1192,7 @@ async function exportAll(){
     // 사진만 담으면 테두리 탭·기울기·컷·화분 지름이 빠져, 다른 주소나 기기로 옮기면 비교·키 재기를 다시 해야 한다.
     // 그래서 메타데이터를 JSON 한 장으로 같이 넣는다. 가져오기가 이것을 읽는다(없으면 사진만 가져온다).
     const meta = {app:'sprout-frame', format:1, exported:new Date().toISOString(),
-      plants: state.plants.map(p => ({id:p.id, name:p.name, createdAt:p.createdAt, views:p.views, potCm:p.potCm, folder:nameOf[p.id]})),
+      plants: state.plants.map(p => ({id:p.id, name:p.name, createdAt:p.createdAt, views:p.views, potCm:p.potCm, tag:p.tag, folder:nameOf[p.id]})),
       shots: shots.map(s => ({file:s._file, plantId:s.plantId, view:s.view, ts:s.ts, date:s.date, w:s.w, h:s.h, tilt:s.tilt, measure:s.measure}))};
     shots.forEach(s => delete s._file);
     entries.push({name:'sproutframe.json', blob:new Blob([JSON.stringify(meta, null, 1)], {type:'application/json'}), date:new Date()});
@@ -1148,6 +1264,8 @@ async function importZip(file){
       if(extra){
         if(extra.views && !p.views) p.views = extra.views;
         if(extra.potCm && !p.potCm) p.potCm = extra.potCm;
+        // 태그가 같이 와야 옮긴 기기에서도 이미 붙인 QR 라벨이 먹는다. 이미 다른 식물이 쓰는 태그면 받지 않는다.
+        if(extra.tag && !p.tag && !state.plants.some(o => o.tag === extra.tag)) p.tag = extra.tag;
       }
       await dbPut('plants', p);
       return p;
@@ -1345,21 +1463,13 @@ el.startBtn.onclick = startCamera;
 el.shutter.onclick = capture;
 el.opacity.oninput = applyOpacity;
 
-el.plantSelect.onchange = async () => {
-  state.plantId = el.plantSelect.value;
-  localStorage.setItem('gc.plant', state.plantId);
-  state.ghostSource = 'latest';
-  state.galleryView = null;
-  await renderViews();
-  await refreshGhost();
-};
-el.addPlant.onclick = async () => {
-  const name = prompt('Plant name (used in file names)');
-  if(!name) return;
-  const p = {id:uid(), name:name.trim(), createdAt:Date.now()};
-  await dbPut('plants', p); state.plants.push(p); state.plantId = p.id;
-  renderPlants(); state.ghostSource = 'latest'; await renderViews(); await refreshGhost();
-};
+el.plantBtn.onclick = openPicker;
+el.addPlant.onclick = addPlant;
+el.pickerClose.onclick = closePicker;
+el.labelsBtn.onclick = openLabels;
+el.labelsClose.onclick = () => { el.labels.hidden = true; };
+el.printBtn.onclick = () => print();
+window.addEventListener('hashchange', tagFromLocation);
 
 el.modeBtn.onclick = () => {
   const diff = el.ghost.classList.toggle('difference');
@@ -1465,6 +1575,8 @@ document.addEventListener('keydown', e => {
   if(e.key === 'Escape'){
     if(state.measuring) closeMeasure(null);
     else if(!el.compare.hidden) closeCompare();
+    else if(!el.labels.hidden) el.labels.hidden = true;
+    else if(!el.picker.hidden) closePicker();
     else { closeGallery(); el.review.hidden = true; }
   }
 });
@@ -1495,4 +1607,5 @@ if('serviceWorker' in navigator){
   if(state.plants.length){ el.intro.hidden = true; el.introHint.hidden = true; el.introPrivacy.hidden = true; }
   await refreshGhost();
   applyOpacity();
+  await tagFromLocation();
 })();
