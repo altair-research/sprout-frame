@@ -73,6 +73,11 @@ main{flex:1; display:flex; flex-direction:column; min-height:0}
   position:absolute; inset:0; width:100%; height:100%;
   object-fit:cover; display:block;
 }
+/* ⚠️ 바로 위 display:block이 hidden 속성을 이긴다(클래스 선택자가 브라우저 기본 [hidden]보다 세다).
+   이 줄이 없어서 **리뷰의 지난 사진(#reviewGhost)이 숨김 상태인데도 불투명하게 새 사진을 덮었다** —
+   "찍은 뒤에 방금 찍은 사진이 아니라 지난 사진이 나온다"(9/17 첫 보고, 9/25 재발)의 진짜 원인.
+   9/17엔 decode 대기·새 <img>·새 프레임 대기로, 9/25엔 카메라 동결로 잘못 짚었다. 카메라 쪽 고스트의 'Ghost: off'도 같은 이유로 안 꺼졌다. */
+.stage video[hidden],.stage img[hidden]{display:none}
 #ghost{pointer-events:none}
 #ghost.difference{mix-blend-mode:difference; opacity:1 !important}
 
