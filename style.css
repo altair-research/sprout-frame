@@ -142,6 +142,15 @@ input[type=range]{flex:1; accent-color:var(--accent)}
   max-width:85%; pointer-events:none;
 }
 .plant-toast[hidden]{display:none}
+/* 라벨 읽기 칸 — labelread 쪽 LABEL_BOX와 같은 비율(가로 80%, 세로 24%, 위에서 38%) */
+.label-box{
+  position:absolute; left:10%; top:38%; width:80%; height:24%; z-index:4;
+  border:3px dashed var(--accent); border-radius:12px; box-shadow:0 0 0 2000px rgba(0,0,0,.35);
+  display:flex; align-items:flex-end; justify-content:center;
+}
+.label-box span{transform:translateY(calc(100% + 8px)); background:rgba(17,20,19,.85); color:var(--fg);
+  padding:4px 10px; border-radius:8px; font-size:14px; text-align:center}
+.label-box[hidden]{display:none}
 @media print{
   body > *:not(#labels){display:none !important}
   #labels{position:static; padding:0; background:#fff}

@@ -4,7 +4,8 @@
 // ⚠️ 버전은 version.js 한 곳에서 올린다(화면에도 같은 값이 보인다).
 importScripts('./version.js');
 const VERSION = self.GC_VERSION;
-const CACHE = 'sproutframe-' + VERSION;   // 옛 'ghostcam-*' 캐시는 activate에서 함께 지워진다
+const CACHE = 'sproutframe-' + VERSION;
+const OCR_CACHE = 'sproutframe-ocr-tesseract7';   // 라벨 읽기 엔진 — 앱 버전과 무관. activate에서 지우지 않는다   // 옛 'ghostcam-*' 캐시는 activate에서 함께 지워진다
 
 const SHELL = [
   './',
@@ -12,6 +13,7 @@ const SHELL = [
   './style.css',
   './app.js',
   './qr.js',
+  './labelread.js',
   './version.js',
   './manifest.webmanifest',
   './privacy.html',
@@ -35,7 +37,7 @@ self.addEventListener('activate', e => {
     caches.keys()
       // **내 이름으로 시작하는 캐시만** 지운다. altair-research.github.io 는 drape 등 다른 앱과 같은 사이트(오리진)라
       // 캐시 저장소를 같이 쓴다. 예전처럼 "내 것이 아니면 전부 삭제"하면 남의 앱 오프라인 캐시를 지운다(2026-09-24 발견).
-      .then(keys => Promise.all(keys.filter(k => (k.startsWith('sproutframe-') || k.startsWith('ghostcam-')) && k !== CACHE)
+      .then(keys => Promise.all(keys.filter(k => (k.startsWith('sproutframe-') || k.startsWith('ghostcam-')) && k !== CACHE && k !== OCR_CACHE)
                                     .map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
@@ -62,6 +64,16 @@ self.addEventListener('fetch', e => {
       if (!hit.redirected) return hit;
       return new Response(await hit.blob(), {status: 200, statusText: 'OK', headers: hit.headers});
     })());
+    return;
+  }
+
+  // 라벨 읽기 엔진(ocr/, 약 7MB)은 앱 버전과 따로 둔 캐시에. 앱 버전 캐시에 넣으면 앱을 고칠 때마다
+  // 7MB를 다시 받는다. 엔진을 바꿀 때만 OCR_CACHE 이름을 올린다. 처음 쓸 때만 받고(SHELL에 안 넣음) 그 뒤엔 오프라인에서도 된다.
+  if (new URL(req.url).pathname.includes('/ocr/')) {
+    e.respondWith(caches.open(OCR_CACHE).then(c => c.match(req).then(hit => hit || fetch(req).then(res => {
+      if (res.ok) c.put(req, res.clone());
+      return res;
+    }))));
     return;
   }
 

@@ -4,6 +4,7 @@
 // 저장은 전부 브라우저 안(IndexedDB). 서버로 나가는 것 없음.
 
 import {qrSvg} from './qr.js';
+import {readCode, codeInName, ocrWorker, ocrStop} from './labelread.js';
 
 const TARGET_W = 1280;          // 출력 폭  = 4:5. Uncommon Plant 사이트가 사진을 4:5 박스에 object-fit:cover로
                                 //          넣기 때문에, 3:4로 찍으면 위아래 6%가 잘렸다.
@@ -46,6 +47,7 @@ const el = {
   plantBtn:$('plantBtn'), plantNameEl:$('plantName'), addPlant:$('addPlant'),
   picker:$('picker'), plantGrid:$('plantGrid'), pickerClose:$('pickerClose'), labelsBtn:$('labelsBtn'),
   plantToast:$('plantToast'), blankBtn:$('blankBtn'),
+  readBtn:$('readBtn'), labelBox:$('labelBox'), labelBoxMsg:$('labelBoxMsg'),
   labels:$('labels'), labelGrid:$('labelGrid'), labelsHint:$('labelsHint'), printBtn:$('printBtn'), labelsClose:$('labelsClose'), galleryBtn:$('galleryBtn'), ver:$('ver'),
   views:$('views'),
   stage:$('stage'), video:$('video'), ghost:$('ghost'), grid:$('grid'), tilt:$('tilt'),
@@ -251,6 +253,76 @@ async function goToTag(tag, how){
   showPlantToast(p.name);
   return true;
 }
+// ── 라벨 글씨 읽기 ────────────────────────────────────────────────
+// 가이드 칸(무대의 가로 80%·세로 24%) 안만 읽는다. 칸 밖의 흰 종이·로고가 라벨보다 밝으면 라벨을 놓쳤다(실측).
+const LABEL_BOX = {x:0.10, y:0.38, w:0.80, h:0.24};
+const READ_TIMEOUT = 25000;
+let _reading = null;          // 진행 중이면 {stop:false}
+async function toggleRead(){
+  if(_reading){ _reading.stop = true; return; }
+  if(!state.stream){ await startCamera(); if(!state.stream) return; }
+  const run = _reading = {stop:false};
+  el.readBtn.classList.add('on');
+  el.labelBox.hidden = false;
+  el.labelBoxMsg.textContent = 'Getting the label reader ready…';
+  const votes = new Map();
+  let found = null;
+  try{
+    // 첫 사용이면 약 7MB를 받는다. 받는 동안 진행률을 칸 아래에 적는다.
+    await ocrWorker(m => {
+      if(m.status && /loading/.test(m.status)) el.labelBoxMsg.textContent = `First time only: downloading the label reader… ${Math.round((m.progress || 0) * 100)}%`;
+    });
+    el.labelBoxMsg.textContent = 'Fit the plant label in this box';
+    const t0 = Date.now();
+    while(!run.stop && Date.now() - t0 < READ_TIMEOUT){
+      const frame = grabBox();
+      if(!frame){ await new Promise(r => setTimeout(r, 200)); continue; }
+      const r = await readCode(frame, frame.width, frame.height);
+      if(run.stop) break;
+      if(!r){ el.labelBoxMsg.textContent = 'Fit the plant label in this box · looking…'; continue; }
+      const n = (votes.get(r.code) || 0) + 1; votes.set(r.code, n);
+      el.labelBoxMsg.textContent = `Reading… ${r.code}?`;
+      if(n >= 2){ found = r.code; break; }       // 같은 코드가 두 번 — 한 번 읽힌 걸로는 믿지 않는다
+    }
+  }catch(e){
+    console.warn('label reader', e);
+    say("The label reader couldn't start on this browser.", true);
+  }finally{
+    el.labelBox.hidden = true; el.readBtn.classList.remove('on');
+    if(_reading === run) _reading = null;
+    ocrStop();
+  }
+  if(found) await goToCode(found);
+  else if(!run.stop) say('Couldn\'t read the label. Try more light, or hold it a little closer.', true);
+}
+// 무대에 보이는 그대로(4:5로 잘린 화면)에서 가이드 칸만 원본 해상도로 떼어 온다.
+function grabBox(){
+  const vw = el.video.videoWidth, vh = el.video.videoHeight;
+  if(!vw) return null;
+  const {sx, sy, sw, sh} = cropRect(vw, vh);
+  const bx = sx + sw * LABEL_BOX.x, by = sy + sh * LABEL_BOX.y, bw = sw * LABEL_BOX.w, bh = sh * LABEL_BOX.h;
+  const k = Math.min(1, 1600 / bw);        // 너무 크면 줄인다 — 라벨 찾기·읽기 모두 1600이면 충분했다(실측 1650)
+  const c = document.createElement('canvas'); c.width = Math.round(bw * k); c.height = Math.round(bh * k);
+  c.getContext('2d').drawImage(el.video, bx, by, bw, bh, 0, 0, c.width, c.height);
+  return c;
+}
+// 읽은 코드 → 식물. 이름에 그 코드가 든 식물이 있으면 그리로, 없으면 새 식물로 만들지 묻는다.
+// 새로 만들 때 이름 칸에 코드를 미리 채운다 — 'AV09 Avocado'처럼 뒤에 덧붙여도 코드는 계속 찾힌다.
+async function goToCode(code){
+  const p = state.plants.find(o => codeInName(o.name) === code);
+  if(p){
+    if(p.id !== state.plantId) await selectPlant(p.id);
+    say(`Label ${code}: ${p.name}`); showPlantToast(p.name);
+    return;
+  }
+  const name = prompt(`Label ${code} isn't in your plants yet. Add it? You can add a name after the code.`, code);
+  if(!name || !name.trim()){ say(`Label ${code} not added.`); return; }
+  const np = {id:uid(), name:uniqueName(name.trim()), createdAt:Date.now(), tag:newTag()};
+  await dbPut('plants', np); state.plants.push(np);
+  await selectPlant(np.id);
+  say(`Added ${np.name}.`); showPlantToast(np.name);
+}
+
 let _toastTimer = 0;
 function showPlantToast(name){
   el.plantToast.textContent = `🌱 ${name}`;
@@ -1507,6 +1579,7 @@ el.opacity.oninput = applyOpacity;
 
 el.plantBtn.onclick = openPicker;
 el.addPlant.onclick = () => addPlant();
+el.readBtn.onclick = toggleRead;
 el.pickerClose.onclick = closePicker;
 el.labelsBtn.onclick = () => { _labelMode = 'plants'; openLabels(); };
 el.blankBtn.onclick = () => { _labelMode = _labelMode === 'blank' ? 'plants' : 'blank'; openLabels(); };

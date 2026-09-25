@@ -26,6 +26,8 @@
   <!-- 이름만 있는 드롭다운이었다. 식물이 늘자 이름만으로는 어느 화분인지 헷갈린다(2026-09-25 사용자) → 사진 격자에서 고른다. -->
   <button id="plantBtn" class="plant-btn" aria-label="Choose plant"><span id="plantName"></span> ▾</button>
   <button id="addPlant" class="ghost-btn" title="Add plant">＋</button>
+  <!-- 라벨 글씨 읽기(AV01 형식). 누르면 가운데 칸이 뜨고, 라벨을 칸에 맞추면 그 식물로 바뀐다. -->
+  <button id="readBtn" class="ghost-btn" title="Read plant label">🏷</button>
   <span class="spacer"></span>
   <!-- 버전은 항상 보이는 헤더에. 첫 화면 소개 안에 넣었더니 무대가 작은 폰에서 위가 잘려 안 보였다(2026-09-17). -->
   <span id="ver" class="ver"></span>
@@ -45,6 +47,7 @@
     <div id="flash" class="flash"></div>
     <!-- QR 라벨로 식물이 바뀌었을 때 크게 알린다. 아래 상태 줄 한 줄로는 바뀐 줄 모르고 찍는다. -->
     <div id="plantToast" class="plant-toast" hidden></div>
+    <div id="labelBox" class="label-box" hidden><span id="labelBoxMsg">Fit the plant label in this box</span></div>
     <div id="stageMsg" class="stage-msg">
       <!-- 처음 여는 사람은 이게 뭔지, 왜 카메라가 필요한지를 여기서 읽고 버튼을 누른다.
            별도 랜딩 페이지를 만들지 않는다 — 파일·캐시 목록·PWA 시작 URL이 늘어날 뿐이고,
