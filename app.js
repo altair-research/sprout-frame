@@ -639,6 +639,7 @@ async function ghostChanged(){
 let _lastMatch = 0;
 function matchTick(){
   _lastMatch = performance.now();
+  checkFrozen();
   const show = state.stream && state.ghostVec && el.review.hidden && !el.ghost.hidden;
   if(!show){ el.match.hidden = true; state.match = null; return; }
   const live = vecOf(el.video, el.video.videoWidth, el.video.videoHeight);
@@ -693,6 +694,7 @@ async function startCamera(){
   await el.video.play().catch(() => {});
   el.stageMsg.hidden = true;
   el.shutter.disabled = false;
+  watchFrames();
   if(!state.matchTimer) state.matchTimer = setInterval(matchTick, 125);   // 초당 8번
   // 라벨 읽기는 초당 2번이면 충분하다. 식물을 바꾸는 건 드문 일이고, 매치 계산과 겹치면 폰이 버벅인다.
   if(SCAN && !state.scanTimer) state.scanTimer = setInterval(scanTick, 500);
@@ -814,7 +816,6 @@ function drawQuad(svg, pts){
 //  ② 리뷰의 <img>가 새 src를 반영하지 않는다 → 매번 **새 <img> 요소를 만들어** load 이벤트 뒤에 바꿔 끼운다.
 async function freshFrame(){
   await el.video.play().catch(() => {});
-  const t0 = el.video.currentTime;
   const byFrame = typeof el.video.requestVideoFrameCallback === 'function'
     ? new Promise(res => {
         let done = false;
@@ -823,10 +824,51 @@ async function freshFrame(){
       })
     : Promise.resolve(false);
   if(await byFrame) return true;
-  // 프레임 콜백은 화면에 실제로 그려질 때만 온다(탭이 가려져 있으면 안 온다). 재생 시각이 흐르고
-  // 있으면 스트림은 살아 있는 것이므로 그것을 두 번째 근거로 삼는다.
-  await new Promise(r => setTimeout(r, 300));
-  return el.video.currentTime > t0;
+  // 두 번째 근거는 **픽셀이 실제로 바뀌었는가**다. 전에는 재생 시각(currentTime)이 흐르는지를 봤는데,
+  // 카메라 스트림은 프레임이 끊겨도 시각이 계속 흐른다 — 그래서 얼어붙은 카메라를 살아 있다고 통과시켰고,
+  // 2026-09-25 실사용에서 아보카도를 겨눴는데 몇 분 전 머니트리 장면이 찍혔다(v42).
+  // 살아 있는 센서는 가만히 있어도 잡음이 있어 두 프레임이 한 바이트도 안 다를 수는 없다.
+  const a = frameSig(); await new Promise(r => setTimeout(r, 300)); const b = frameSig();
+  return !!(a && b && a !== b);
+}
+// 영상의 작은 표본(48×48, 축소 없이 띄엄띄엄 뽑은 점)을 문자열로. 같으면 프레임이 안 바뀐 것.
+// 크게 줄이면 잡음이 평균에 묻혀 멈추지 않은 화면도 같아 보일 수 있어, 평균을 내지 않고 점을 뽑는다.
+const _sigCanvas = document.createElement('canvas');
+function frameSig(){
+  const vw = el.video.videoWidth, vh = el.video.videoHeight;
+  if(!vw) return null;
+  const N = 48; _sigCanvas.width = N; _sigCanvas.height = N;
+  const g = _sigCanvas.getContext('2d', {willReadFrequently:true});
+  g.imageSmoothingEnabled = false;
+  g.drawImage(el.video, 0, 0, vw, vh, 0, 0, N, N);
+  const d = g.getImageData(0, 0, N, N).data;
+  let h = 0; for(let i = 0; i < d.length; i++) h = (h * 31 + d[i]) | 0;
+  return h + ':' + d[0] + d[1000] + d[5000];
+}
+
+// ── 멈춘 카메라 감시 ──────────────────────────────────────────────
+// 찍기 직전 검사만으로는 늦다 — 멈춘 화면을 보고 겨냥하다가 라벨도 못 읽고(v42 실사용) 시간을 버린다.
+// 도착하는 프레임마다 시각을 적어 두고, 화면이 켜져 있는데 2.5초 동안 한 장도 안 오면 카메라를 다시 켠다.
+// 2.5초의 근거: 카메라는 초당 15~30장을 보낸다. 어두워서 노출이 길어져도 초당 몇 장은 온다. 여유를 크게 뒀다.
+const FROZEN_MS = 2500;
+let _lastFrameAt = 0, _frameWatch = false, _restartAt = 0;
+function watchFrames(){
+  _lastFrameAt = performance.now();
+  if(_frameWatch || typeof el.video.requestVideoFrameCallback !== 'function') return;
+  _frameWatch = true;
+  const tick = () => { _lastFrameAt = performance.now(); el.video.requestVideoFrameCallback(tick); };
+  el.video.requestVideoFrameCallback(tick);    // 카메라를 다시 켜도 같은 <video>라 이 고리는 그대로 이어진다
+}
+function checkFrozen(){
+  if(!_frameWatch || !state.stream || document.visibilityState !== 'visible') return;
+  // 다른 화면이 카메라를 덮고 있으면 프레임 콜백이 안 올 수 있다 — 그때는 판정하지 않는다
+  if(!el.review.hidden || !el.gallery.hidden || !el.picker.hidden || !el.labels.hidden || !el.compare.hidden) { _lastFrameAt = performance.now(); return; }
+  const now = performance.now();
+  if(now - _lastFrameAt < FROZEN_MS || now - _restartAt < 8000) return;
+  _restartAt = now;
+  console.warn('camera frozen — restarting');
+  say('Camera froze — restarting it…', true);
+  startCamera();
 }
 async function capture(){
   // 식물이 하나도 없으면 찍어도 넣을 곳이 없다. 찍고 나서 실패하면 그 한 장을 잃는다.
