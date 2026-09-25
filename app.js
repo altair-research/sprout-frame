@@ -61,7 +61,7 @@ const el = {
   gallery:$('gallery'), galleryTitle:$('galleryTitle'), galleryClose:$('galleryClose'),
   galleryViews:$('galleryViews'),
   shots:$('shots'), storageInfo:$('storageInfo'), growth:$('growth'),
-  exportAll:$('exportAll'), importBtn:$('importBtn'), importFile:$('importFile'), stripBtn:$('stripBtn'), potBtn:$('potBtn'), autoSave:$('autoSave'),
+  exportAll:$('exportAll'), renameBtn:$('renameBtn'), importBtn:$('importBtn'), importFile:$('importFile'), stripBtn:$('stripBtn'), potBtn:$('potBtn'), autoSave:$('autoSave'),
   measure:$('measure'), measureTitle:$('measureTitle'), measureClose:$('measureClose'),
   measureStage:$('measureStage'), measureImg:$('measureImg'), measureSvg:$('measureSvg'), measureLayer:$('measureLayer'),
   measureHint:$('measureHint'), measureUndo:$('measureUndo'), measureSave:$('measureSave'),
@@ -917,6 +917,24 @@ async function saveMeasure(){
   closeMeasure(shot);
   if(!quad) await openGallery();
 }
+// 식물 이름 바꾸기(2026-09-25 사용자 요청). 옛 백업을 가져오면 이름이 폴더 이름(`pinkprincess`)으로 붙는다.
+// 이름은 화면과 내보내기 파일 이름에만 쓰이고, 사진은 식물 id로 묶여 있어 바꿔도 사진·비교는 그대로다.
+// 다른 식물과 이름이 겹치면 막는다 — 목록에서 구분이 안 되고, 내보내기 폴더도 섞인다.
+async function renamePlant(){
+  const p = plant(); if(!p) return;
+  const v = prompt('New name for this plant', p.name);
+  if(v === null) return;
+  const name = v.trim();
+  if(!name || name === p.name) return;
+  if(state.plants.some(o => o.id !== p.id && o.name.toLowerCase() === name.toLowerCase())){
+    el.storageInfo.textContent = `There's already a plant called "${name}".`; return;
+  }
+  p.name = name;
+  await dbPut('plants', p);
+  renderPlants();
+  await openGallery();
+  el.storageInfo.textContent = `Renamed to "${name}".`;
+}
 async function askPotCm(){
   const p = plant(); if(!p) return;
   const v = prompt('Pot rim diameter in cm — measure it once with a ruler. Leave empty to clear.', p.potCm ? String(p.potCm) : '');
@@ -1266,6 +1284,7 @@ async function openGallery(){
   el.autoSave.checked = localStorage.getItem('gc.autosave') !== 'no';
   el.potBtn.textContent = p && p.potCm ? `Pot: ${p.potCm} cm` : 'Pot size: not set';
   el.potBtn.hidden = !p;
+  el.renameBtn.hidden = !p;
   const filter = state.galleryView === null ? state.viewId : state.galleryView;   // '' = 전부
   el.galleryViews.innerHTML = p ? [{id:'', name:'All'}, ...viewsOf(p)].map(v =>
     `<button class="chip view${filter === v.id ? ' on' : ''}" data-gview="${v.id}">${esc(v.name)}</button>`).join('') : '';
@@ -1401,6 +1420,7 @@ el.measureClose.onclick = () => closeMeasure(null);
 el.angleBtn.onclick = fixAngle;
 el.alignedBtn.onclick = downloadAligned;
 el.potBtn.onclick = askPotCm;
+el.renameBtn.onclick = renamePlant;
 
 const renderAutoBtn = () => {
   const on = localStorage.getItem('gc.autoshoot') !== 'no';
