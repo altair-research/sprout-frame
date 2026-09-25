@@ -1411,10 +1411,23 @@ async function importZip(file){
     const plantsByName = new Map(state.plants.map(p => [p.name, p]));
     const plantsBySlug = new Map(state.plants.map(p => [slug(p.name), p]));
     const idMap = {};                 // 내보낸 식물 id → 여기 식물
+    const renamed = [], created = [];   // 등록부 가져오기 결과 보고용
     const ensurePlant = async (name, extra) => {
       let p = plantsByName.get(name) || plantsBySlug.get(slug(name));
+      // 등록부 파일(tools/make-register.py)은 옛 이름(aliases)을 같이 싣는다. 사진이 붙은 옛 이름의 식물이 있으면
+      // 새로 만들지 않고 **그 식물의 이름을 바꾼다** — 사진·비교 기록이 새 코드 이름으로 그대로 이어진다(2026-09-25).
+      if(!p && extra && extra.aliases){
+        const al = new Set(extra.aliases.map(slug));
+        p = state.plants.find(o => al.has(slug(o.name)));
+        if(p){
+          renamed.push(`${p.name} → ${name}`);
+          plantsByName.delete(p.name); plantsBySlug.delete(slug(p.name));
+          p.name = name; plantsByName.set(name, p); plantsBySlug.set(slug(name), p);
+        }
+      }
       if(!p){
         p = {id:uid(), name, createdAt:Date.now()};
+        if(extra && extra.aliases) created.push(name);
         state.plants.push(p); plantsByName.set(name, p); plantsBySlug.set(slug(name), p);
       }
       if(extra){
@@ -1468,6 +1481,12 @@ async function importZip(file){
     state.plants.sort((a, b) => a.createdAt - b.createdAt);
     if(!state.plantId && state.plants.length) state.plantId = state.plants[0].id;
     renderPlants(); await renderViews(); await refreshGhost();
+    if(renamed.length || created.length){
+      await openGallery();
+      el.storageInfo.textContent = `Plant list: ${created.length} added` + (created.length ? ` (${created.join(', ')})` : '') +
+        `. ${renamed.length} renamed, photos kept` + (renamed.length ? ` (${renamed.join(', ')})` : '') + '.';
+      return;
+    }
     el.storageInfo.textContent = `Imported ${added} photo${added === 1 ? '' : 's'}` +
       (skipped ? `, skipped ${skipped} already here` : '') +
       (meta ? '.' : '. Old backup without details — use Tap rim on each photo to compare again.');
