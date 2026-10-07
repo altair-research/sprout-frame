@@ -44,6 +44,8 @@ async function dbDel(store, key){ const d = await db(); return wrap(d.transactio
 // ── DOM ───────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const el = {
+  textDialog:$('textDialog'), textDialogTitle:$('textDialogTitle'), textDialogHint:$('textDialogHint'), textDialogLabel:$('textDialogLabel'), textDialogInput:$('textDialogInput'), textDialogSave:$('textDialogSave'),
+  plantStorageInfo:$('plantStorageInfo'), pickerImport:$('pickerImport'), otherAddress:$('otherAddress'),
   plantSearch:$('plantSearch'), plantSearchStatus:$('plantSearchStatus'),
   reviewTitle:$('reviewTitle'), rimProgress:$('rimProgress'), reviewError:$('reviewError'), heightBtn:$('heightBtn'), saveHint:$('saveHint'),
   galleryEmpty:$('galleryEmpty'), galleryEmptyHint:$('galleryEmptyHint'), emptyShoot:$('emptyShoot'), emptyImport:$('emptyImport'),
@@ -127,6 +129,30 @@ const decoded = img => Promise.race([img.decode().catch(() => {}), new Promise(r
 
 function say(msg, warn){ el.status.textContent = msg || ''; el.status.classList.toggle('warn', !!warn); }
 
+// 입력 대화상자는 단순한 텍스트만 받는다. 취소·빈 이름은 호출한 쪽에서 저장하지 않는다.
+function askText({title, label, hint, value='', action='Save', allowEmpty=false, inputMode='text'}){
+  if(el.textDialog.open) return Promise.resolve(null);
+  el.textDialogTitle.textContent = title;
+  el.textDialogLabel.textContent = label;
+  el.textDialogHint.textContent = hint;
+  el.textDialogInput.value = value;
+  el.textDialogInput.required = !allowEmpty;
+  el.textDialogInput.inputMode = inputMode;
+  el.textDialogSave.textContent = action;
+  el.textDialog.returnValue = '';
+  const previous = document.activeElement;
+  return new Promise(resolve => {
+    el.textDialog.addEventListener('close', () => {
+      const result = el.textDialog.returnValue === 'save' ? el.textDialogInput.value : null;
+      if(previous && previous.isConnected && !previous.closest('[hidden]')) previous.focus({preventScroll:true});
+      resolve(result);
+    }, {once:true});
+    el.textDialog.showModal();
+    el.textDialogInput.focus(); el.textDialogInput.select();
+  });
+}
+$('textDialogCancel').onclick = () => el.textDialog.close('cancel');
+
 // ── 식물 목록 ─────────────────────────────────────────────────────
 async function loadPlants(){
   state.plants = (await dbGetAll('plants')).sort((a,b) => a.createdAt - b.createdAt);
@@ -175,6 +201,10 @@ async function openPicker(){
     o.n++; if(!o.latest || s.ts > o.latest.ts) o.latest = s;
     byPlant.set(s.plantId, o);
   }
+  el.plantStorageInfo.textContent = `${state.plants.length} plant${state.plants.length === 1 ? "" : "s"} and ${shots.length} photo${shots.length === 1 ? "" : "s"} saved in this browser on ${location.hostname}. This is the full list before search filtering.`;
+  const old = location.hostname.endsWith('workers.dev');
+  el.otherAddress.href = old ? 'https://altair-research.github.io/sprout-frame/' : 'https://ghost-cam.altair0622.workers.dev/';
+  el.otherAddress.textContent = old ? 'Open current address' : 'Open old address';
   el.plantGrid.innerHTML = '';
   el.plantSearch.value = '';
   for(const p of state.plants){
@@ -217,10 +247,7 @@ function uniqueName(base){
 }
 // tag를 주면 그 라벨(빈 라벨)에 새 식물을 묶는다.
 async function addPlant(tag){
-  const ask = typeof tag === 'string'
-    ? 'New label. Name the plant it is on (a number is added if the name is taken)'
-    : 'Plant name (a number is added if the name is taken)';
-  const name = prompt(ask);
+  const name = await askText({title:typeof tag === 'string' ? 'Add this labelled plant' : 'Add a plant', label:'Plant name or code', hint:'Use a name or a label code, such as AV01. If the name is already used, a number is added.', action:'Add plant'});
   if(!name || !name.trim()) return null;
   const p = {id:uid(), name:uniqueName(name.trim()), createdAt:Date.now(), tag:typeof tag === 'string' ? tag : newTag()};
   await dbPut('plants', p); state.plants.push(p);
@@ -339,7 +366,7 @@ async function goToCode(code){
     say(`Label ${code}: ${p.name}`); showPlantToast(p.name);
     return;
   }
-  const name = prompt(`Label ${code} isn't in your plants yet. Add it? You can add a name after the code.`, code);
+  const name = await askText({title:'New plant label', label:'Plant name or code', hint:`${code} is not in this browser's plant list yet. Add it, or cancel to choose an existing plant.`, value:code, action:'Add plant'});
   if(!name || !name.trim()){ say(`Label ${code} not added.`); return; }
   const np = {id:uid(), name:uniqueName(name.trim()), createdAt:Date.now(), tag:newTag()};
   await dbPut('plants', np); state.plants.push(np);
@@ -422,7 +449,7 @@ async function selectView(id){
 }
 async function addView(){
   const p = plant(); if(!p) return;
-  const name = prompt('Name for the new view (e.g. Top, Roots)');
+  const name = await askText({title:'Add a photo view', label:'View name', hint:'For example: Top or Roots.', action:'Add view'});
   if(!name || !name.trim()) return;
   const views = viewsOf(p).slice();
   const id = slug(name) + '-' + uid().slice(-4);
@@ -435,7 +462,7 @@ async function editView(id){
   const p = plant(); if(!p) return;
   const views = viewsOf(p).map(v => Object.assign({}, v));
   const v = views.find(x => x.id === id); if(!v) return;
-  const ans = prompt(`Rename "${v.name}", or type remove to drop this view. Photos already taken stay in the Log.`, v.name);
+  const ans = await askText({title:'Edit photo view', label:'View name', hint:'Rename this view, or type remove to drop it. Existing photos stay in the photo log.', value:v.name});
   if(ans === null || !ans.trim() || ans.trim() === v.name) return;
   if(ans.trim().toLowerCase() === 'remove'){
     if(views.length === 1){ say('Keep at least one view.', true); return; }
@@ -885,6 +912,7 @@ function watchFrames(){
 }
 function checkFrozen(){
   if(!_frameWatch || !state.stream || document.visibilityState !== 'visible') return;
+  if(el.textDialog.open){ _lastFrameAt = performance.now(); return; }
   // 다른 화면이 카메라를 덮고 있으면 프레임 콜백이 안 올 수 있다 — 그때는 판정하지 않는다
   if(!el.review.hidden || !el.gallery.hidden || !el.picker.hidden || !el.labels.hidden || !el.compare.hidden) { _lastFrameAt = performance.now(); return; }
   const now = performance.now();
@@ -1250,7 +1278,7 @@ async function saveMeasure(){
 // 다른 식물과 이름이 겹치면 막는다 — 목록에서 구분이 안 되고, 내보내기 폴더도 섞인다.
 async function renamePlant(){
   const p = plant(); if(!p) return;
-  const v = prompt('New name for this plant', p.name);
+  const v = await askText({title:'Rename plant', label:'Plant name or code', hint:'Your photos and comparisons stay linked to this plant.', value:p.name});
   if(v === null) return;
   const name = v.trim();
   if(!name || name === p.name) return;
@@ -1265,7 +1293,7 @@ async function renamePlant(){
 }
 async function askPotCm(){
   const p = plant(); if(!p) return;
-  const v = prompt('Pot rim diameter in cm — measure it once with a ruler. Leave empty to clear.', p.potCm ? String(p.potCm) : '');
+  const v = await askText({title:'Pot rim size', label:'Diameter in centimetres', hint:'Measure the rim once with a ruler. Leave empty to clear the size.', value:p.potCm ? String(p.potCm) : '', allowEmpty:true, inputMode:'decimal'});
   if(v === null) return;
   const n = parseFloat(v);
   if(v.trim() === ''){ delete p.potCm; }
@@ -1702,6 +1730,7 @@ el.startBtn.onclick = beginPhoto;
 el.emptyShoot.onclick = async () => { closeGallery(); await beginPhoto(); };
 el.emptyImport.onclick = () => el.importBtn.click();
 el.plantSearch.oninput = filterPlants;
+el.pickerImport.onclick = async () => { closePicker(); await openGallery(); $('logTools').open = true; };
 el.heightBtn.onclick = () => {
   state.heightMode = !state.heightMode;
   if(!state.heightMode) state.rim = state.rim.slice(0, 2);
@@ -1844,7 +1873,7 @@ function syncSheetFocus(){
 }
 new MutationObserver(syncSheetFocus).observe(document.body, {subtree:true, attributes:true, attributeFilter:['hidden']});
 document.addEventListener('keydown', e => {
-  if(e.key !== 'Tab' || !activeSheet) return;
+  if(el.textDialog.open || e.key !== 'Tab' || !activeSheet) return;
   const items = [...activeSheet.querySelectorAll('button:not(:disabled), input:not(:disabled), select, summary, a[href], [tabindex="0"]')].filter(e => e.getClientRects().length && !e.closest('[hidden]'));
   if(!items.length) return;
   const first = items[0], last = items[items.length-1];
@@ -1853,6 +1882,7 @@ document.addEventListener('keydown', e => {
 });
 
 document.addEventListener('keydown', e => {
+  if(el.textDialog.open) return;
   if(e.code === 'Space' && !activeSheet && !e.target.closest('input, textarea, select, button, summary') && !el.shutter.disabled && el.review.hidden && el.gallery.hidden && el.compare.hidden){
     e.preventDefault(); capture();
   }

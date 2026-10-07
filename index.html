@@ -192,6 +192,13 @@
   </div>
   <label class="search-field"><span>Find a plant</span><input id="plantSearch" type="search" placeholder="Search name or code, e.g. AV01" autocomplete="off"></label>
   <p id="plantSearchStatus" class="hint" role="status" aria-live="polite"></p>
+  <details class="tool-panel storage-help">
+    <summary>Missing plants or photos?</summary>
+    <p id="plantStorageInfo" class="hint"></p>
+    <p class="hint">Records belong to the device, browser and site address where you saved them. They do not sync between browsers or devices.</p>
+    <p class="hint">If you used the old address, open it in the same browser and export a backup. Then import that ZIP here.</p>
+    <div class="row btns"><a id="otherAddress" class="ghost-btn" href="https://ghost-cam.altair0622.workers.dev/" target="_blank" rel="noopener">Open old address</a><button id="pickerImport" class="ghost-btn">Import a backup</button></div>
+  </details>
   <div id="plantGrid" class="shots"></div>
 </section>
 
@@ -227,6 +234,16 @@
   </div>
 </section>
 
+<!-- 브라우저 prompt 대신 앱 안에서 입력한다. 취소는 DB에 쓰지 않는다. -->
+<dialog id="textDialog" class="input-dialog" aria-labelledby="textDialogTitle" aria-describedby="textDialogHint">
+  <form method="dialog" id="textForm">
+    <p class="eyebrow">SPROUT FRAME</p>
+    <h2 id="textDialogTitle">Add a plant</h2>
+    <p id="textDialogHint" class="hint"></p>
+    <label class="search-field"><span id="textDialogLabel">Plant name or code</span><input id="textDialogInput" type="text" autocomplete="off" required></label>
+    <div class="row dialog-actions"><button id="textDialogCancel" class="ghost-btn" type="button">Cancel</button><button id="textDialogSave" class="primary" type="submit" value="save">Add plant</button></div>
+  </form>
+</dialog>
 <canvas id="canvas" hidden></canvas>
 <script src="version.js"></script>
 <script src="app.js" type="module"></script>

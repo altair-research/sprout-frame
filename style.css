@@ -401,3 +401,16 @@ button:not(:disabled):hover{border-color:var(--accent)}
 #camera:has(#stageMsg[hidden]) #installTip{display:none}
 .controls .install-tip{max-width:none; margin:0; text-align:center; color:var(--dim)}
 .status:empty{display:none}
+
+/* 기본 prompt의 호스트 이름 대신 앱의 입력창을 보여준다. */
+.input-dialog{width:min(440px,calc(100% - 32px)); max-height:calc(100svh - 32px); overflow:auto;
+  border:1px solid var(--line); border-radius:22px; padding:24px; background:var(--panel); color:var(--fg); box-shadow:0 24px 80px #0008}
+.input-dialog::backdrop{background:rgba(5,12,7,.75); backdrop-filter:blur(5px)}
+.input-dialog form{display:grid; gap:16px}
+.input-dialog .eyebrow{margin:0}
+.input-dialog h2{font-size:24px; letter-spacing:-.03em}
+.input-dialog .hint{font-size:13px; line-height:1.5}
+.input-dialog input{background:var(--bg)}
+.dialog-actions{justify-content:flex-end; margin-top:4px}
+.storage-help .hint{margin:0 0 12px}
+.storage-help a.ghost-btn{display:inline-flex; align-items:center; text-decoration:none; font-size:13px}
