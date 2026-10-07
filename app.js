@@ -44,6 +44,9 @@ async function dbDel(store, key){ const d = await db(); return wrap(d.transactio
 // ── DOM ───────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const el = {
+  plantSearch:$('plantSearch'), plantSearchStatus:$('plantSearchStatus'),
+  reviewTitle:$('reviewTitle'), rimProgress:$('rimProgress'), reviewError:$('reviewError'), heightBtn:$('heightBtn'), saveHint:$('saveHint'),
+  galleryEmpty:$('galleryEmpty'), galleryEmptyHint:$('galleryEmptyHint'), emptyShoot:$('emptyShoot'), emptyImport:$('emptyImport'),
   plantBtn:$('plantBtn'), plantNameEl:$('plantName'), addPlant:$('addPlant'),
   picker:$('picker'), plantGrid:$('plantGrid'), pickerClose:$('pickerClose'), labelsBtn:$('labelsBtn'),
   plantToast:$('plantToast'), blankBtn:$('blankBtn'),
@@ -82,6 +85,7 @@ const state = {
   pinnedShot: null,           // Log에서 고정한 사진(ghostSource === 'pinned'일 때)
   ghostUrl: null,
   ghostShot: null,            // 고스트가 저장된 사진이면 그 레코드(기울기 등 메타를 쓰려고)
+  heightMode: false, saving: false,
   pending: null,              // 촬영 후 저장 대기 중인 Blob
   pendingUrl: null,
   pendingTilt: null,
@@ -136,11 +140,17 @@ async function loadPlants(){
 }
 function renderPlants(){
   if(!state.plants.length){
-    el.plantNameEl.textContent = 'Add a plant'; state.plantId = null;
+    el.startBtn.textContent = 'Add your first plant';
+    el.intro.hidden = false;
+    el.introHint.textContent = 'Name your plant, then turn on the camera.';
+    el.plantNameEl.textContent = 'Choose or add'; state.plantId = null;
     localStorage.removeItem('gc.plant');
     return;
   }
   el.plantNameEl.textContent = plantName();
+  el.intro.hidden = true;
+  el.startBtn.textContent = 'Turn on camera';
+  el.introHint.textContent = `Ready to photograph ${plantName()}. Keep the pot in frame.`;
   localStorage.setItem('gc.plant', state.plantId);
 }
 async function selectPlant(id){
@@ -166,10 +176,13 @@ async function openPicker(){
     byPlant.set(s.plantId, o);
   }
   el.plantGrid.innerHTML = '';
+  el.plantSearch.value = '';
   for(const p of state.plants){
     const o = byPlant.get(p.id) || {n:0, latest:null};
     const b = document.createElement('button');
     b.className = 'shot pick' + (p.id === state.plantId ? ' on' : '');
+    b.dataset.plantName = p.name.toLowerCase();
+    b.setAttribute('aria-pressed', String(p.id === state.plantId));
     let img = '<div class="noimg">🌱</div>';
     if(o.latest){ const u = objURL(o.latest.blob); _pickerUrls.push(u); img = `<img src="${u}" alt="" loading="lazy">`; }
     b.innerHTML = `${img}<div class="name">${esc(p.name)}</div>` +
@@ -182,7 +195,16 @@ async function openPicker(){
   add.innerHTML = '<div class="noimg">＋</div><div class="name">New plant</div><div class="meta">&nbsp;</div>';
   add.onclick = async () => { closePicker(); await addPlant(); };
   el.plantGrid.appendChild(add);
+  filterPlants();
   el.picker.hidden = false;
+}
+function filterPlants(){
+  const q = el.plantSearch.value.trim().toLowerCase();
+  let n = 0;
+  el.plantGrid.querySelectorAll('[data-plant-name]').forEach(b => {
+    b.hidden = !b.dataset.plantName.includes(q); if(!b.hidden) n++;
+  });
+  el.plantSearchStatus.textContent = q && !n ? 'No matching plants. Try another name or code.' : `${n} plant${n === 1 ? '' : 's'} · choose one to photograph`;
 }
 function closePicker(){ el.picker.hidden = true; _pickerUrls.forEach(dropURL); _pickerUrls = []; }
 // 같은 이름이 있으면 번호를 붙인다(Avocado → Avocado 2 → Avocado 3). 같은 종을 여러 그루 키우는 경우(2026-09-25 아보카도).
@@ -263,6 +285,7 @@ async function toggleRead(){
   if(!state.stream){ await startCamera(); if(!state.stream) return; }
   const run = _reading = {stop:false};
   el.readBtn.classList.add('on');
+  el.readBtn.textContent = 'Cancel reading'; el.readBtn.setAttribute('aria-pressed', 'true');
   el.labelBox.hidden = false;
   el.labelBoxMsg.textContent = 'Getting the label reader ready…';
   const votes = new Map();
@@ -289,6 +312,7 @@ async function toggleRead(){
     say("The label reader couldn't start on this browser.", true);
   }finally{
     el.labelBox.hidden = true; el.readBtn.classList.remove('on');
+    el.readBtn.textContent = 'Read label'; el.readBtn.setAttribute('aria-pressed', 'false');
     if(_reading === run) _reading = null;
     ocrStop();
   }
@@ -445,7 +469,7 @@ async function refreshGhost(){
   if(!state.plantId){
     el.ghost.hidden = true; el.ghost.removeAttribute('src');
     el.ghostBtn.textContent = 'Ghost: on';
-    say('Add a plant with ＋ above to get started.');
+    say('');
     return;
   }
   const v = viewById(state.viewId);
@@ -872,7 +896,7 @@ function checkFrozen(){
 }
 async function capture(){
   // 식물이 하나도 없으면 찍어도 넣을 곳이 없다. 찍고 나서 실패하면 그 한 장을 잃는다.
-  if(!state.plantId){ say('Add a plant with ＋ above first.', true); return; }
+  if(!state.plantId){ say('Choose or add a plant before taking a photo.', true); return; }
   if(el.shutter.disabled || !el.review.hidden) return;   // 리뷰가 열려 있는 동안 또 찍으면 탭한 점이 지워진다
   el.shutter.disabled = true;                       // 두 번 눌리는 것 방지
   try{
@@ -901,17 +925,35 @@ async function captureFrame(){
   el.reviewImg.replaceWith(img); el.reviewImg = img; img.id = 'reviewImg';
   if(state.ghostUrl){ el.reviewGhost.src = state.ghostUrl; el.compareBtn.disabled = false; }
   else { el.reviewGhost.removeAttribute('src'); el.compareBtn.disabled = true; }
-  state.rim = []; drawRim();
+  el.compareBtn.hidden = !state.ghostUrl;
+  state.rim = []; state.heightMode = false; el.reviewError.hidden = true;
+  el.reviewTitle.textContent = `${plantName()} · pot rim`;
+  el.reviewGhost.hidden = true;
+  drawRim();
   el.review.hidden = false;
 }
 function drawRim(){
   drawTaps(el.reviewSvg, state.rim, (plant() || {}).potCm);
   el.rimUndo.disabled = !state.rim.length;
-  el.reviewHint.textContent = state.rim.length < 3 ? RIM_STEPS[state.rim.length]
-    : 'Got it. Save to keep the photo and compare with last time.';
+  const ready = state.rim.length >= 2;
+  el.reviewHint.textContent = !ready ? RIM_STEPS[state.rim.length]
+    : state.heightMode && state.rim.length < 3 ? 'Tap the TOP of the plant to add a height measurement.'
+    : state.rim.length === 3 ? 'Height marked. Your photo is ready to save.' : 'Both edges marked. Your photo is ready to save.';
+  [...el.rimProgress.children].forEach((li, i) => {
+    li.classList.toggle('done', i < Math.min(state.rim.length, 2));
+    li.classList.toggle('current', i === Math.min(state.rim.length, 2));
+    if(i === Math.min(state.rim.length, 2)) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+  });
+  el.heightBtn.hidden = !ready;
+  el.heightBtn.textContent = state.heightMode ? 'Remove height' : 'Add height (optional)';
+  el.heightBtn.setAttribute('aria-pressed', String(state.heightMode));
+  el.heightBtn.classList.toggle('on', state.heightMode);
+  el.saveBtn.textContent = ready ? 'Save photo' : 'Save photo only';
+  el.saveHint.textContent = !ready ? 'Mark both edges to include this photo in comparisons.'
+    : 'Saved in this app' + (localStorage.getItem('gc.autosave') !== 'no' ? ' and downloaded as a JPEG.' : '.');
 }
 function rimTap(ev){
-  if(state.rim.length >= 3) return;
+  if(state.saving || state.rim.length >= (state.heightMode ? 3 : 2)) return;
   ev.preventDefault();
   const q = tapAt(ev, el.reviewStage); if(!q) return;
   state.rim.push(q);
@@ -919,37 +961,51 @@ function rimTap(ev){
 }
 
 async function save(){
-  if(!state.pending) return;
-  const shot = {
-    id: uid(), plantId: state.plantId, view: state.viewId, ts: Date.now(), date: today(),
-    w: TARGET_W, h: TARGET_H, blob: state.pending,
-    tilt: state.pendingTilt || undefined,
-    measure: measureOf(state.rim),
-  };
-  try{ await dbPut('shots', shot); }
-  catch(err){ say(`Save failed: ${err.name}. Storage may be full.`, true); return; }
-  // 브라우저가 공간을 회수하면 사진이 사라진다. 첫 저장 때 영구 보관을 요청해 둔다.
-  if(navigator.storage && navigator.storage.persist && !localStorage.getItem('gc.persisted')){
-    const ok = await navigator.storage.persist().catch(() => false);
-    localStorage.setItem('gc.persisted', ok ? 'yes' : 'no');
-  }
-  // 2026-09-17 첫 실사용에서 뒤집힘: "Save 눌렀는데 사진첩에 없다." 사용자에게 Save = 내 사진첩이다.
-  // 앱 안(IndexedDB)에만 남으면 저장이 안 된 것으로 읽힌다. 그래서 값이 없으면 켜짐('no'일 때만 건너뜀).
-  const downloaded = localStorage.getItem('gc.autosave') !== 'no';
-  if(downloaded) download(state.pending, shotFileName(shot));
-  state.pending = null;
-  el.review.hidden = true;
-  // 비교 상대: 같은 컷에서 테두리가 찍힌 직전 사진
-  const prev = (await shotsOf(state.plantId, shot.view)).find(s => s.id !== shot.id && rimOf(s));
-  state.ghostSource = 'latest';
-  await renderViews(); await refreshGhost();
-  if(!rimOf(shot)){
-    say(`${savedMsg(downloaded)} No rim taps, so this one won't be compared. You can add them later in the Log.`);
-  }else if(prev){
-    say(savedMsg(downloaded));
-    await openCompare(prev, shot);
-  }else{
-    say(`${savedMsg(downloaded)} Next time, the app will line the photos up by the pot and show the change.`);
+  if(!state.pending || state.saving) return;
+  state.saving = true; el.reviewError.hidden = true;
+  el.review.setAttribute('aria-busy', 'true');
+  el.review.querySelectorAll('button').forEach(b => { b.disabled = true; });
+  el.saveBtn.textContent = 'Saving…';
+  try {
+    const shot = {
+      id: uid(), plantId: state.plantId, view: state.viewId, ts: Date.now(), date: today(),
+      w: TARGET_W, h: TARGET_H, blob: state.pending,
+      tilt: state.pendingTilt || undefined,
+      measure: measureOf(state.rim),
+    };
+    try{ await dbPut('shots', shot); }
+    catch(err){
+      el.reviewError.textContent = `Could not save (${err.name}). Your photo is still here. Free some browser storage and try again, or use Share to keep a copy.`;
+      el.reviewError.hidden = false; return;
+    }
+    // 브라우저가 공간을 회수하면 사진이 사라진다. 첫 저장 때 영구 보관을 요청해 둔다.
+    if(navigator.storage && navigator.storage.persist && !localStorage.getItem('gc.persisted')){
+      const ok = await navigator.storage.persist().catch(() => false);
+      localStorage.setItem('gc.persisted', ok ? 'yes' : 'no');
+    }
+    // 2026-09-17 첫 실사용에서 뒤집힘: "Save 눌렀는데 사진첩에 없다." 사용자에게 Save = 내 사진첩이다.
+    // 앱 안(IndexedDB)에만 남으면 저장이 안 된 것으로 읽힌다. 그래서 값이 없으면 켜짐('no'일 때만 건너뜀).
+    const downloaded = localStorage.getItem('gc.autosave') !== 'no';
+    if(downloaded) download(state.pending, shotFileName(shot));
+    state.pending = null;
+    el.review.hidden = true;
+    // 비교 상대: 같은 컷에서 테두리가 찍힌 직전 사진
+    const prev = (await shotsOf(state.plantId, shot.view)).find(s => s.id !== shot.id && rimOf(s));
+    state.ghostSource = 'latest';
+    await renderViews(); await refreshGhost();
+    if(!rimOf(shot)){
+      say(`${savedMsg(downloaded)} No rim taps, so this one won't be compared. You can add them later in the Log.`);
+    }else if(prev){
+      say(savedMsg(downloaded));
+      await openCompare(prev, shot);
+    }else{
+      say(`${savedMsg(downloaded)} Next time, the app will line the photos up by the pot and show the change.`);
+    }
+  } finally {
+    state.saving = false; el.review.removeAttribute('aria-busy');
+    el.review.querySelectorAll('button').forEach(b => { b.disabled = false; });
+    el.compareBtn.disabled = !state.ghostUrl;
+    drawRim();
   }
 }
 const hhmm = ts => { const d = new Date(ts); const p = n => String(n).padStart(2,'0'); return p(d.getHours()) + p(d.getMinutes()); };
@@ -1586,7 +1642,9 @@ async function openGallery(){
   // 그래프는 컷 하나를 골랐을 때만. 옆과 위에서 잰 값을 한 선에 섞으면 뜻이 없다.
   if(filter) renderGrowth(list, p && p.potCm); else el.growth.hidden = true;
   el.shots.innerHTML = '';
-  if(!list.length) el.shots.innerHTML = '<p class="hint">No shots yet.</p>';
+  el.galleryEmpty.hidden = !!list.length;
+  el.galleryEmptyHint.textContent = p ? `No photos of ${p.name} in this view yet. Take one to start comparing.` : 'Add a plant and take your first photo, or import an existing backup.';
+  el.stripBtn.hidden = list.length < 2;
   for(const s of list){
     const url = objURL(s.blob);
     const h = heightOf(s, p && p.potCm);
@@ -1599,11 +1657,13 @@ async function openGallery(){
        <div class="acts">
          <button data-a="cmp" ${rimOf(s) && prev ? '' : 'disabled'}>Compare</button>
          <button data-a="measure">${rimOf(s) ? 'Re-tap' : 'Tap rim'}</button>
-         <button data-a="ref">Ghost</button>
+       </div>
+       <details class="shot-menu"><summary>Photo options</summary><div class="acts">
+         <button data-a="ref">Use as guide</button>
          <button data-a="share">Share</button>
          <button data-a="dl">Download</button>
          <button data-a="del">Delete</button>
-       </div>`;
+       </div></details>`;
     card.querySelector('[data-a=cmp]').onclick = () => openCompare(prev, s);
     card.querySelector('[data-a=measure]').onclick = () => openMeasure(s);
     card.querySelector('[data-a=ref]').onclick = async () => {
@@ -1634,7 +1694,19 @@ async function openGallery(){
 function closeGallery(){ el.gallery.hidden = true; }
 
 // ── 이벤트 ────────────────────────────────────────────────────────
-el.startBtn.onclick = startCamera;
+async function beginPhoto(){
+  if(!state.plantId && !(await addPlant())) return;
+  if(!state.stream) await startCamera();
+}
+el.startBtn.onclick = beginPhoto;
+el.emptyShoot.onclick = async () => { closeGallery(); await beginPhoto(); };
+el.emptyImport.onclick = () => el.importBtn.click();
+el.plantSearch.oninput = filterPlants;
+el.heightBtn.onclick = () => {
+  state.heightMode = !state.heightMode;
+  if(!state.heightMode) state.rim = state.rim.slice(0, 2);
+  drawRim();
+};
 el.shutter.onclick = capture;
 el.opacity.oninput = applyOpacity;
 
@@ -1720,7 +1792,8 @@ el.autoBtn.onclick = () => {
 };
 el.moreBtn.onclick = () => {
   el.adv.hidden = !el.adv.hidden;
-  el.moreBtn.textContent = el.adv.hidden ? 'More tools ▾' : 'Fewer tools ▴';
+  el.moreBtn.textContent = el.adv.hidden ? 'Camera tools ▾' : 'Hide camera tools ▴';
+  el.moreBtn.setAttribute('aria-expanded', String(!el.adv.hidden));
   localStorage.setItem('gc.more', el.adv.hidden ? 'no' : 'yes');
   renderViews();
 };
@@ -1745,11 +1818,45 @@ el.autoSave.onchange = () => {
                           : 'Shots stay in this app. Use Share or Export all to get them out.');
 };
 
+// 겹치는 화면은 보이는 맨 위 화면만 키보드·스크린리더로 조작한다.
+// 기록에서 Compare를 열 때 기록 화면이 비교를 덮지 않도록 CSS 층 순서와 함께 관리한다.
+let activeSheet = null;
+const sheetFocus = new WeakMap();
+function syncSheetFocus(){
+  const sheets = [...document.querySelectorAll('.sheet')];
+  const top = sheets.filter(s => !s.hidden).sort((a,b) => +getComputedStyle(b).zIndex - +getComputedStyle(a).zIndex)[0] || null;
+  if(top === activeSheet) return;
+  const previous = activeSheet;
+  if(top && !sheetFocus.has(top)) sheetFocus.set(top, document.activeElement);
+  document.querySelector('.app-header').inert = !!top;
+  $('camera').inert = !!top;
+  sheets.forEach(s => { s.inert = s !== top; s.setAttribute('role', 'dialog'); s.setAttribute('aria-modal', String(s === top)); });
+  activeSheet = top;
+  if(top){
+    if(!top.hasAttribute('aria-label')) top.setAttribute('aria-label', (top.querySelector('h2') || {}).textContent || 'Photo tools');
+    const target = top === el.picker ? el.plantSearch : top.querySelector('button:not(:disabled)');
+    target && target.focus({preventScroll:true});
+  }else if(previous){
+    const target = sheetFocus.get(previous); sheetFocus.delete(previous);
+    if(target && target.isConnected && !target.closest('[hidden]')) target.focus({preventScroll:true});
+    else el.plantBtn.focus({preventScroll:true});
+  }
+}
+new MutationObserver(syncSheetFocus).observe(document.body, {subtree:true, attributes:true, attributeFilter:['hidden']});
 document.addEventListener('keydown', e => {
-  if(e.code === 'Space' && !el.shutter.disabled && el.review.hidden && el.gallery.hidden && el.compare.hidden){
+  if(e.key !== 'Tab' || !activeSheet) return;
+  const items = [...activeSheet.querySelectorAll('button:not(:disabled), input:not(:disabled), select, summary, a[href], [tabindex="0"]')].filter(e => e.getClientRects().length && !e.closest('[hidden]'));
+  if(!items.length) return;
+  const first = items[0], last = items[items.length-1];
+  if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+});
+
+document.addEventListener('keydown', e => {
+  if(e.code === 'Space' && !activeSheet && !e.target.closest('input, textarea, select, button, summary') && !el.shutter.disabled && el.review.hidden && el.gallery.hidden && el.compare.hidden){
     e.preventDefault(); capture();
   }
-  if(e.key === 'Escape'){
+  if(e.key === 'Escape' && !state.saving){
     if(state.measuring) closeMeasure(null);
     else if(!el.compare.hidden) closeCompare();
     else if(!el.labels.hidden) el.labels.hidden = true;
@@ -1778,10 +1885,10 @@ if('serviceWorker' in navigator){
   if(!window.isSecureContext){
     say('Not a secure context. The camera only works over https or http://localhost.', true);
   }
-  if(localStorage.getItem('gc.more') === 'yes'){ el.adv.hidden = false; el.moreBtn.textContent = 'Fewer tools ▴'; }
+  if(localStorage.getItem('gc.more') === 'yes'){ el.adv.hidden = false; el.moreBtn.textContent = 'Hide camera tools ▴'; el.moreBtn.setAttribute('aria-expanded', 'true'); }
   await loadPlants();
   // 소개글은 처음 온 사람 몫이다. 식물이 있으면 이미 아는 사람이니 버튼만 남긴다.
-  if(state.plants.length){ el.intro.hidden = true; el.introHint.hidden = true; el.introPrivacy.hidden = true; }
+  if(state.plants.length){ el.intro.hidden = true; el.introPrivacy.hidden = true; }
   await refreshGhost();
   applyOpacity();
   await tagFromLocation();

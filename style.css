@@ -280,3 +280,124 @@ input[type=range]{flex:1; accent-color:var(--accent)}
 .privacy a{color:var(--dim)}
 .install-tip{font-size:12px}
 .install-tip[hidden]{display:none}
+
+/* v46 — 첫 행동과 사진을 중심으로 화면의 우선순위를 정리한다. */
+:root{
+  --bg:#111714; --panel:#1c2520; --line:#33423a;
+  --fg:#f1f5ef; --dim:#acb9af; --accent:#b2d990;
+  color-scheme:dark;
+}
+body{height:100svh}
+button,summary,input,select{touch-action:manipulation}
+button,summary{min-height:44px}
+button:disabled{cursor:default; opacity:.5}
+button:focus-visible,summary:focus-visible,input:focus-visible,a:focus-visible{
+  outline:3px solid var(--accent); outline-offset:3px;
+}
+button:not(:disabled):hover{border-color:var(--accent)}
+.primary,.shutter{border-radius:16px; box-shadow:0 3px 0 rgba(0,0,0,.18)}
+.ghost-btn,.plant-btn{border-radius:12px}
+.app-header{padding:10px max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left));
+  padding-top:max(10px, env(safe-area-inset-top)); border-bottom:1px solid var(--line)}
+.brand-row,.plant-row{display:flex; align-items:center; gap:8px; max-width:680px; margin:auto}
+.brand-row{margin-bottom:10px}
+.brand{font-size:16px; font-weight:650; letter-spacing:-.02em; white-space:nowrap}
+.brand-icon{display:inline-grid; place-items:center; color:var(--accent); width:28px; height:28px;
+  background:#263a2a; border-radius:9px; font-size:25px; margin-right:5px}
+.brand-row .ghost-btn{font-size:13px; padding:8px 12px}
+.ver{font-size:11px; margin:0}
+.plant-btn{flex:1; min-width:0; max-width:none; text-align:left; position:relative; padding:8px 30px 8px 12px; line-height:1.35}
+.plant-btn .field-label{display:block; font-size:9px; color:var(--dim); letter-spacing:.12em; margin-bottom:2px}
+.plant-btn > span:last-child{position:absolute; right:12px; top:18px; color:var(--accent)}
+.icon-btn{width:44px; flex:none; font-size:21px; padding:0}
+#readBtn{font-size:13px; flex:none; padding:10px}
+#readBtn.on{background:#263a2a; color:var(--accent); border-color:var(--accent)}
+#camera .stage{border-radius:20px; margin-top:10px; box-shadow:0 0 0 1px var(--line)}
+.stage-msg{padding:24px 20px; gap:12px; background:radial-gradient(ellipse at 50% 0%,#243a2b 0%,#17231c 50%,#111714 100%)}
+.eyebrow{font-size:10px; font-weight:650; letter-spacing:.14em; color:var(--accent); margin:0 0 6px}
+.intro{max-width:35ch; width:100%; text-align:left}
+.intro h1{font-size:30px; line-height:1.1; letter-spacing:-.035em; font-weight:650; margin-bottom:10px}
+.intro .lead{font-size:14px; line-height:1.5; color:#c8d5cc; margin-bottom:18px}
+.intro .steps{list-style:none; counter-reset:step; padding:0; display:grid; gap:12px}
+.intro .steps li{counter-increment:step; position:relative; padding-left:38px; margin:0; line-height:1.4}
+.intro .steps li:before{content:counter(step); position:absolute; left:0; top:0; width:27px; height:27px;
+  border:1px solid #4b6551; border-radius:50%; display:grid; place-items:center; color:var(--accent)}
+.intro .steps b{display:block; color:var(--fg); font-size:13px; font-weight:600}
+.intro .steps span{font-size:12px}
+#startBtn{width:100%; max-width:320px; margin-top:4px}
+#introHint{max-width:30ch; font-size:12px}
+.privacy{font-size:11px; opacity:1}
+.install-tip{font-size:11px; max-width:36ch}
+.controls{gap:8px; padding:12px 16px max(12px,env(safe-area-inset-bottom))}
+.status{font-size:12px; line-height:1.45}
+.more{min-height:44px; padding:8px 0; font-size:12px}
+#camera:has(#stageMsg:not([hidden])) .shutter{display:none}
+#camera:has(#stageMsg:not([hidden])) #moreBtn{display:none}
+.sheet{padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); gap:16px}
+.sheet > .bar{padding:0 0 12px; flex-wrap:wrap}
+.sheet h2{font-size:18px; letter-spacing:-.02em; overflow-wrap:anywhere}
+.sheet .stage{border-radius:16px; box-shadow:0 0 0 1px var(--line)}
+.sheet > :not(.stage){width:100%; max-width:760px; margin-left:auto; margin-right:auto}
+.sheet .hint{font-size:13px; line-height:1.5}
+.rim-progress{display:flex; list-style:none; padding:0; gap:6px; margin:0; font-size:11px; font-weight:600}
+.rim-progress li{flex:1; padding:9px 6px; background:var(--panel); border:1px solid var(--line); border-radius:10px; text-align:center; color:var(--dim)}
+.rim-progress .current{background:#283c2b; border-color:var(--accent); color:var(--accent)}
+.rim-progress .done{color:var(--accent)}
+.review-sheet .stage{width:min(100%,calc(47svh * 4 / 5)); margin-bottom:auto}
+.review-footer{position:sticky; bottom:0; padding:12px 0 0; background:var(--bg); border-top:1px solid var(--line); display:grid; gap:10px}
+.review-footer .primary{width:100%; min-height:50px}
+.review-tools{gap:6px}
+.review-tools .chip{font-size:12px; padding:8px 10px}
+#saveHint{font-size:11px; text-align:center}
+.inline-error{margin:0; border:1px solid var(--warn); border-radius:12px; padding:12px; background:#382a1d; color:#ffcf96; font-size:13px}
+.inline-error[hidden]{display:none}
+#review[aria-busy=true] .mark{pointer-events:none}
+.search-field{display:grid; gap:6px; font-size:12px; color:var(--dim)}
+.search-field input{width:100%; min-height:48px; border-radius:12px; border:1px solid var(--line); background:var(--panel); color:var(--fg); padding:12px 14px; font:inherit; font-size:15px}
+.shots{grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px}
+.shot{border-radius:16px}
+.shot.pick[hidden]{display:none}
+.shot.pick.on{box-shadow:0 0 0 2px var(--accent)}
+.shot.pick.on .name:after{content:' ✓'; color:var(--accent)}
+.shot.pick .name{padding:12px 12px 0}
+.shot .meta{padding:10px 12px; line-height:1.6}
+.shot.pick .noimg{background:linear-gradient(145deg,#23372a,#17201b); color:var(--accent); font-size:36px}
+.shot .acts{padding:0 10px 10px; gap:6px}
+.shot .acts button{min-height:44px; border-radius:9px; padding:6px; flex:1 1 40%; font-size:12px}
+.shot-menu{border-top:1px solid var(--line)}
+.shot-menu summary{font-size:12px; color:var(--dim); padding:12px; cursor:pointer}
+.shot-menu [data-a=del]{color:#efb2a8}
+.tool-panel{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:0 14px 0}
+.tool-panel summary{padding:14px 0; font-size:13px; cursor:pointer; font-weight:600}
+.tool-panel[open]{padding-bottom:14px}
+.tool-panel .hint{margin-top:12px}
+.chip.check{white-space:normal; font-size:13px}
+.empty-state{text-align:center; padding:36px 16px; display:grid; justify-items:center; gap:12px; background:var(--panel); border:1px dashed var(--line); border-radius:20px}
+.empty-state[hidden]{display:none}
+.empty-state h3{font-size:20px; letter-spacing:-.02em; margin:0}
+.empty-state p{font-size:13px; color:var(--dim); max-width:32ch; margin:0 0 6px}
+.empty-icon{font-size:36px; color:var(--accent)}
+#gallery .views{padding:0; min-height:44px}
+#gallery .views:empty{display:none}
+#storageInfo{font-size:11px; color:var(--dim)}
+@media (max-width:360px){
+  .app-header{padding-left:12px; padding-right:12px}
+  .brand{font-size:14px} .brand-icon{margin-right:2px}
+  .stage-msg{padding:18px 16px} .intro h1{font-size:26px}
+  .shots{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (min-width:900px){
+  .review-sheet .stage{width:min(420px,calc(50svh * 4 / 5))}
+  .sheet > :not(.stage){max-width:760px}
+  .review-sheet > :not(.stage){max-width:540px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important; transition:none!important}
+}
+
+/* 기록 위에 비교, 비교 위에 테두리 편집이 올라가야 한다. */
+#gallery{z-index:10} #review{z-index:20} #compare{z-index:30}
+#picker{z-index:40} #labels{z-index:50} #measure{z-index:60}
+#camera:has(#stageMsg[hidden]) #installTip{display:none}
+.controls .install-tip{max-width:none; margin:0; text-align:center; color:var(--dim)}
+.status:empty{display:none}

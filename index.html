@@ -22,16 +22,17 @@
   <a href="https://altair-research.github.io/sprout-frame/">open the new address →</a><br>
   To move your photos: here <b>Log → Export all</b>, then on the new address <b>Log → Import</b>.
 </div>
-<header class="bar">
-  <!-- 이름만 있는 드롭다운이었다. 식물이 늘자 이름만으로는 어느 화분인지 헷갈린다(2026-09-25 사용자) → 사진 격자에서 고른다. -->
-  <button id="plantBtn" class="plant-btn" aria-label="Choose plant"><span id="plantName"></span> ▾</button>
-  <button id="addPlant" class="ghost-btn" title="Add plant">＋</button>
-  <!-- 라벨 글씨 읽기(AV01 형식). 누르면 가운데 칸이 뜨고, 라벨을 칸에 맞추면 그 식물로 바뀐다. -->
-  <button id="readBtn" class="ghost-btn" title="Read plant label">🏷</button>
-  <span class="spacer"></span>
-  <!-- 버전은 항상 보이는 헤더에. 첫 화면 소개 안에 넣었더니 무대가 작은 폰에서 위가 잘려 안 보였다(2026-09-17). -->
-  <span id="ver" class="ver"></span>
-  <button id="galleryBtn" class="ghost-btn">Log</button>
+<header class="app-header">
+  <div class="brand-row">
+    <div class="brand"><span class="brand-icon" aria-hidden="true">↟</span> Sprout Frame</div>
+    <span class="spacer"></span><span id="ver" class="ver"></span>
+    <button id="galleryBtn" class="ghost-btn">Photo log</button>
+  </div>
+  <div class="plant-row">
+    <button id="plantBtn" class="plant-btn" aria-label="Choose plant"><span class="field-label">CURRENT PLANT</span><span id="plantName"></span><span aria-hidden="true"> ▾</span></button>
+    <button id="addPlant" class="ghost-btn icon-btn" aria-label="Add plant" title="Add plant">＋</button>
+    <button id="readBtn" class="ghost-btn" aria-pressed="false">Read label</button>
+  </div>
 </header>
 
 <main id="camera">
@@ -53,29 +54,31 @@
            별도 랜딩 페이지를 만들지 않는다 — 파일·캐시 목록·PWA 시작 URL이 늘어날 뿐이고,
            설명은 버튼 위 몇 줄이면 충분하다. 카메라가 켜지면 이 블록은 사라진다. -->
       <div class="intro" id="intro">
-        <h1>Sprout Frame</h1>
-        <p class="lead">Shoot your plant any way you like. Tap the pot rim twice. See how much it grew since last time.</p>
+        <p class="eyebrow">A LITTLE GROWTH, OVER TIME</p>
+        <h1>See your plant grow.</h1>
+        <p class="lead">A quick photo today. A clearer comparison next time.</p>
         <ol class="steps">
-          <li>Add a plant and shoot it, pot in frame.</li>
-          <li>Tap the left and right edges of the pot rim.</li>
-          <li>Next time, the app lines the two photos up by the pot and shows the change.</li>
+          <li><b>Take a photo</b><span>Keep the whole pot in frame.</span></li>
+          <li><b>Mark the pot rim</b><span>Tap its left and right edges.</span></li>
+          <li><b>See the change</b><span>Compare with your next photo.</span></li>
         </ol>
       </div>
-      <button id="startBtn" class="primary">Turn on camera</button>
-      <p class="hint" id="introHint">Your browser will ask for camera permission.</p>
+      <button id="startBtn" class="primary">Add your first plant</button>
+      <p class="hint" id="introHint">Name your plant, then turn on the camera.</p>
       <p class="privacy" id="introPrivacy">Photos stay in this device's browser.<br>Nothing is sent to a server, and no location is recorded.
         <a href="privacy.html">Privacy</a></p>
-      <!-- 아이폰 사파리는 홈 화면에 설치하지 않은 사이트의 저장 데이터를 7일 뒤 지울 수 있다. 사진이 전부 브라우저 안에
-           있으므로, 설치 안내는 기능 설명이 아니라 데이터 보호다. 이미 설치해 연 경우(standalone)는 숨긴다. -->
-      <p class="hint install-tip" id="installTip">Tip: <b>Add to Home Screen</b> so your photos are kept safely.</p>
+
     </div>
   </div>
 
   <div class="controls">
     <button id="shutter" class="shutter" disabled>Shoot</button>
-    <p id="status" class="status"></p>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+      <!-- 아이폰 사파리는 홈 화면에 설치하지 않은 사이트의 저장 데이터를 7일 뒤 지울 수 있다. 사진이 전부 브라우저 안에
+           있으므로, 설치 안내는 기능 설명이 아니라 데이터 보호다. 이미 설치해 연 경우(standalone)는 숨긴다. -->
+      <p class="hint install-tip" id="installTip"><b>Add to Home Screen</b> for quick access. Export a backup to keep a copy of your photos.</p>
     <!-- 매번 쓰는 건 식물·카메라·Shoot 셋뿐이다. 나머지는 접어 둔다 — "너무 복잡하다"(2026-09-23 실사용). -->
-    <button id="moreBtn" class="more">More tools ▾</button>
+    <button id="moreBtn" class="more" aria-expanded="false" aria-controls="adv">Camera tools ▾</button>
     <div id="adv" class="adv" hidden>
       <label class="row">
         <span>Ghost <b id="opacityVal">40%</b></span>
@@ -98,20 +101,26 @@
 
 <!-- 촬영 직후. 여기서 화분 테두리 양끝을 탭한다 — 이게 이 앱의 핵심 동작이다(PROJECT.md §9).
      꼭대기까지 탭하면 키가 나온다. 탭 없이 Save도 된다(그 사진은 비교에서 빠진다). -->
-<section id="review" class="sheet" hidden>
+<section id="review" class="sheet review-sheet" aria-label="Mark pot rim" hidden>
+  <div class="bar"><div><p class="eyebrow">NEW PHOTO</p><h2 id="reviewTitle">Mark the pot rim</h2></div><span class="spacer"></span><button id="retakeBtn" class="ghost-btn">Retake</button></div>
+  <ol id="rimProgress" class="rim-progress" aria-label="Pot rim steps"><li>1 · Left edge</li><li>2 · Right edge</li><li>Ready to save</li></ol>
+  <p id="reviewHint" class="hint" role="status" aria-live="polite"></p>
   <div id="reviewStage" class="stage">
     <img id="reviewImg" alt="Just taken">
     <img id="reviewGhost" alt="" hidden>
     <svg id="reviewSvg" class="msvg" viewBox="0 0 1280 1600"></svg>
     <div id="reviewLayer" class="mark"></div>
   </div>
-  <p id="reviewHint" class="hint"></p>
-  <div class="row btns">
-    <button id="compareBtn" class="chip">Ghost</button>
-    <button id="rimUndo" class="chip" disabled>Undo tap</button>
-    <button id="shareBtn" class="chip">Share</button>
-    <button id="retakeBtn" class="chip">Retake</button>
-    <button id="saveBtn" class="primary">Save</button>
+  <div class="review-footer">
+    <p id="reviewError" class="inline-error" role="alert" hidden></p>
+    <div class="row btns review-tools">
+      <button id="rimUndo" class="chip" disabled>Undo tap</button>
+      <button id="heightBtn" class="chip" aria-pressed="false" hidden>Add height (optional)</button>
+      <button id="compareBtn" class="chip">Hold for previous</button>
+      <button id="shareBtn" class="chip">Share</button>
+    </div>
+    <button id="saveBtn" class="primary">Save photo only</button>
+    <p id="saveHint" class="hint">Mark both edges to include this photo in comparisons.</p>
   </div>
 </section>
 
@@ -148,18 +157,28 @@
     <button id="galleryClose" class="ghost-btn">Close</button>
   </div>
   <div id="galleryViews" class="views"></div>
-  <div class="row btns">
-    <button id="stripBtn" class="chip">Side by side (JPEG)</button>
-    <button id="exportAll" class="chip">Export all (ZIP)</button>
-    <button id="importBtn" class="chip">Import (ZIP)</button>
-    <input id="importFile" type="file" accept=".zip,application/zip" hidden>
-    <button id="renameBtn" class="chip">Rename plant</button>
-    <button id="potBtn" class="chip">Pot: — cm</button>
-    <label class="chip check"><input id="autoSave" type="checkbox"> Also download each shot</label>
-  </div>
-  <p id="storageInfo" class="hint"></p>
   <div id="growth" class="growth" hidden></div>
+  <div id="galleryEmpty" class="empty-state" hidden>
+    <span class="empty-icon" aria-hidden="true">↟</span><h3>Your growth story starts here.</h3>
+    <p id="galleryEmptyHint">Take your first photo, then come back to see the change.</p>
+    <button id="emptyShoot" class="primary">Take a photo</button>
+    <button id="emptyImport" class="ghost-btn">Import existing photos</button>
+  </div>
   <div id="shots" class="shots"></div>
+  <button id="stripBtn" class="ghost-btn">Side by side (JPEG)</button>
+  <details id="logTools" class="tool-panel">
+    <summary>Plant settings &amp; backup</summary>
+    <div class="row btns">
+      <button id="renameBtn" class="chip">Rename plant</button>
+      <button id="potBtn" class="chip">Pot: — cm</button>
+      <button id="exportAll" class="chip">Export all (ZIP)</button>
+      <button id="importBtn" class="chip">Import (ZIP)</button>
+      <input id="importFile" type="file" accept=".zip,application/zip" hidden>
+      <label class="chip check"><input id="autoSave" type="checkbox"> Download each saved photo</label>
+    </div>
+    <p class="hint">Photos live in this browser. Export all plants and photos as a backup.</p>
+  </details>
+  <p id="storageInfo" class="hint" role="status" aria-live="polite"></p>
 </section>
 
 <!-- 식물 고르기. 식물마다 가장 최근 사진을 붙여 보여 준다. 순서는 만든 순서로 고정 — 최근 찍은 순으로 하면
@@ -171,6 +190,8 @@
     <button id="labelsBtn" class="ghost-btn">QR labels</button>
     <button id="pickerClose" class="ghost-btn">Close</button>
   </div>
+  <label class="search-field"><span>Find a plant</span><input id="plantSearch" type="search" placeholder="Search name or code, e.g. AV01" autocomplete="off"></label>
+  <p id="plantSearchStatus" class="hint" role="status" aria-live="polite"></p>
   <div id="plantGrid" class="shots"></div>
 </section>
 
